@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../viewmodels/recetas_viewmodel.dart';
 import '../models/receta.dart';
 import 'login_view.dart';
+import 'receta_detalle.dart';
 
 class RecetasView extends StatefulWidget {
   final String nombre;
@@ -50,7 +51,9 @@ class _RecetasViewState extends State<RecetasView> {
     return Scaffold(
       body: SafeArea(
         child: _viewModel.cargando
-            ? const Center(child: CircularProgressIndicator(color: Color(0xFFB85C38)))
+            ? const Center(
+                child: CircularProgressIndicator(color: Color(0xFFB85C38)),
+              )
             : CustomScrollView(
                 slivers: [
                   // Header
@@ -62,7 +65,10 @@ class _RecetasViewState extends State<RecetasView> {
                         children: [
                           Row(
                             children: [
-                              const Icon(Icons.restaurant_menu, color: Color(0xFFB85C38)),
+                              const Icon(
+                                Icons.restaurant_menu,
+                                color: Color(0xFFB85C38),
+                              ),
                               const SizedBox(width: 8),
                               const Text(
                                 'Palate',
@@ -79,10 +85,15 @@ class _RecetasViewState extends State<RecetasView> {
                             onPressed: () {
                               Navigator.pushReplacement(
                                 context,
-                                MaterialPageRoute(builder: (_) => const LoginView()),
+                                MaterialPageRoute(
+                                  builder: (_) => const LoginView(),
+                                ),
                               );
                             },
-                            icon: const Icon(Icons.logout, color: Color(0xFF8A8A8A)),
+                            icon: const Icon(
+                              Icons.logout,
+                              color: Color(0xFF8A8A8A),
+                            ),
                           ),
                         ],
                       ),
@@ -134,7 +145,10 @@ class _RecetasViewState extends State<RecetasView> {
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 12,
+                        ),
                         decoration: BoxDecoration(
                           color: const Color(0xFFB85C38),
                           borderRadius: BorderRadius.circular(24),
@@ -151,7 +165,11 @@ class _RecetasViewState extends State<RecetasView> {
                               ),
                             ),
                             SizedBox(width: 6),
-                            Icon(Icons.arrow_forward, color: Colors.white, size: 18),
+                            Icon(
+                              Icons.arrow_forward,
+                              color: Colors.white,
+                              size: 18,
+                            ),
                           ],
                         ),
                       ),
@@ -166,14 +184,19 @@ class _RecetasViewState extends State<RecetasView> {
                         decoration: InputDecoration(
                           hintText: 'Buscar receitas...',
                           hintStyle: const TextStyle(color: Color(0xFFB0B0B0)),
-                          prefixIcon: const Icon(Icons.search, color: Color(0xFF8A8A8A)),
+                          prefixIcon: const Icon(
+                            Icons.search,
+                            color: Color(0xFF8A8A8A),
+                          ),
                           filled: true,
                           fillColor: const Color(0xFFF0EBE3),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(16),
                             borderSide: BorderSide.none,
                           ),
-                          contentPadding: const EdgeInsets.symmetric(vertical: 14),
+                          contentPadding: const EdgeInsets.symmetric(
+                            vertical: 14,
+                          ),
                         ),
                       ),
                     ),
@@ -189,23 +212,42 @@ class _RecetasViewState extends State<RecetasView> {
                               padding: EdgeInsets.all(40),
                               child: Text(
                                 'Non hai receitas dispoñibles',
-                                style: TextStyle(color: Color(0xFF8A8A8A), fontSize: 16),
+                                style: TextStyle(
+                                  color: Color(0xFF8A8A8A),
+                                  fontSize: 16,
+                                ),
                               ),
                             ),
                           ),
                         )
                       : SliverList(
-                          delegate: SliverChildBuilderDelegate(
-                            (context, index) {
-                              final receta = _viewModel.recetas[index];
-                              return _RecetaCard(
+                          delegate: SliverChildBuilderDelegate((
+                            context,
+                            index,
+                          ) {
+                            final receta = _viewModel.recetas[index];
+                            return GestureDetector(
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => RecetaDetalleView(
+                                      recetaId: receta.id,
+                                      titulo: receta.titulo,
+                                      imagenUrl: _imagenReceta(index),
+                                    ),
+                                  ),
+                                );
+                              },
+                              child: _RecetaCard(
                                 receta: receta,
                                 imagenUrl: _imagenReceta(index),
-                                dificultadTexto: _dificultadTexto(receta.dificultad),
-                              );
-                            },
-                            childCount: _viewModel.recetas.length,
-                          ),
+                                dificultadTexto: _dificultadTexto(
+                                  receta.dificultad,
+                                ),
+                              ),
+                            );
+                          }, childCount: _viewModel.recetas.length),
                         ),
 
                   const SliverToBoxAdapter(child: SizedBox(height: 24)),
@@ -227,10 +269,26 @@ class _RecetasViewState extends State<RecetasView> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _NavBarItem(icon: Icons.home_outlined, label: 'Inicio', activo: false),
-              _NavBarItem(icon: Icons.restaurant_menu, label: 'Receitas', activo: true),
-              _NavBarItem(icon: Icons.bookmark_outline, label: 'Gardadas', activo: false),
-              _NavBarItem(icon: Icons.person_outline, label: 'Perfil', activo: false),
+              _NavBarItem(
+                icon: Icons.home_outlined,
+                label: 'Inicio',
+                activo: false,
+              ),
+              _NavBarItem(
+                icon: Icons.restaurant_menu,
+                label: 'Receitas',
+                activo: true,
+              ),
+              _NavBarItem(
+                icon: Icons.bookmark_outline,
+                label: 'Gardadas',
+                activo: false,
+              ),
+              _NavBarItem(
+                icon: Icons.person_outline,
+                label: 'Perfil',
+                activo: false,
+              ),
             ],
           ),
         ),
@@ -280,7 +338,11 @@ class _RecetaCard extends StatelessWidget {
                     height: 200,
                     color: const Color(0xFFF0EBE3),
                     child: const Center(
-                      child: Icon(Icons.restaurant, size: 60, color: Color(0xFFB85C38)),
+                      child: Icon(
+                        Icons.restaurant,
+                        size: 60,
+                        color: Color(0xFFB85C38),
+                      ),
                     ),
                   );
                 },
@@ -315,18 +377,32 @@ class _RecetaCard extends StatelessWidget {
                   const SizedBox(height: 16),
                   Row(
                     children: [
-                      const Icon(Icons.access_time, size: 16, color: Color(0xFF8A8A8A)),
+                      const Icon(
+                        Icons.access_time,
+                        size: 16,
+                        color: Color(0xFF8A8A8A),
+                      ),
                       const SizedBox(width: 4),
                       Text(
                         '${receta.tiempoTotal} min',
-                        style: const TextStyle(fontSize: 13, color: Color(0xFF8A8A8A)),
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: Color(0xFF8A8A8A),
+                        ),
                       ),
                       const SizedBox(width: 16),
-                      const Icon(Icons.trending_up, size: 16, color: Color(0xFF8A8A8A)),
+                      const Icon(
+                        Icons.trending_up,
+                        size: 16,
+                        color: Color(0xFF8A8A8A),
+                      ),
                       const SizedBox(width: 4),
                       Text(
                         dificultadTexto,
-                        style: const TextStyle(fontSize: 13, color: Color(0xFF8A8A8A)),
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: Color(0xFF8A8A8A),
+                        ),
                       ),
                     ],
                   ),

@@ -26,6 +26,7 @@ public class Alimento {
     private String infoNutricional;
 
     @OneToMany(mappedBy = "alimento")
+    @com.fasterxml.jackson.annotation.JsonIgnore
     private List<RecetaAlimento> recetaAlimentos = new ArrayList<>();
 
     public Alimento() {

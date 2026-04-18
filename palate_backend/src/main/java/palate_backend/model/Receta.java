@@ -44,6 +44,7 @@ public class Receta {
     private LocalDateTime createdAt;
 
     @OneToMany(mappedBy = "receta", cascade = CascadeType.ALL, orphanRemoval = true)
+    @com.fasterxml.jackson.annotation.JsonManagedReference
     private List<RecetaAlimento> ingredientes = new ArrayList<>();
 
     public Receta() {

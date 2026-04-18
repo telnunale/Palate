@@ -16,10 +16,12 @@ public class RecetaAlimento {
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
+    @com.fasterxml.jackson.annotation.JsonBackReference
     @JoinColumn(name = "receta_id", nullable = false)
     private Receta receta;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER)
+    @com.fasterxml.jackson.annotation.JsonIgnoreProperties({"recetaAlimentos"})
     @JoinColumn(name = "alimento_id", nullable = false)
     private Alimento alimento;
 

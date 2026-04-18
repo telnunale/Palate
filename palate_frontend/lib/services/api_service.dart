@@ -55,4 +55,15 @@ class ApiService {
       throw Exception('Error al cargar recetas');
     }
   }
+  Future<Map<String, dynamic>> obtenerRecetaPorId(int id) async {
+    final respuesta = await http.get(Uri.parse('$baseUrl/recetas/$id'));
+
+    if (respuesta.statusCode == 200) {
+      return json.decode(respuesta.body);
+    } else {
+      throw Exception('Error al cargar la receta');
+    }
+  }
 }
+
+

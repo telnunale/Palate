@@ -1,31 +1,27 @@
 package palate_backend.controller;
 
-import palate_backend.model.Usuario;
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.PersistenceContext;
-import jakarta.persistence.TypedQuery;
+import palate_backend.dto.UsuarioDTO;
+import palate_backend.service.UsuarioService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
 
-    @PersistenceContext
-    private EntityManager em;
+    private final UsuarioService usuarioService;
 
     @Autowired
-    private PasswordEncoder passwordEncoder;
+    public AuthController(UsuarioService usuarioService) {
+        this.usuarioService = usuarioService;
+    }
 
     @PostMapping("/registro")
-    @Transactional
     public ResponseEntity<Map<String, String>> registro(@RequestBody Map<String, String> datos) {
         String email = datos.get("email");
         String password = datos.get("password");
@@ -37,26 +33,17 @@ public class AuthController {
             return ResponseEntity.badRequest().body(error);
         }
 
-        // Comprobar si el email ya existe
-        String jpql = "SELECT u FROM Usuario u WHERE u.email = :emailParam";
-        TypedQuery<Usuario> query = em.createQuery(jpql, Usuario.class);
-        query.setParameter("emailParam", email);
-        List<Usuario> existentes = query.getResultList();
-
-        if (!existentes.isEmpty()) {
+        try {
+            usuarioService.registro(email, password, nombre);
+            Map<String, String> respuesta = new HashMap<>();
+            respuesta.put("mensaje", "Usuario registrado correctamente");
+            respuesta.put("email", email);
+            return ResponseEntity.ok(respuesta);
+        } catch (IllegalArgumentException e) {
             Map<String, String> error = new HashMap<>();
-            error.put("error", "El email ya está registrado");
+            error.put("error", e.getMessage());
             return ResponseEntity.badRequest().body(error);
         }
-
-        // Crear usuario con password encriptado
-        Usuario usuario = new Usuario(email, passwordEncoder.encode(password), nombre);
-        em.persist(usuario);
-
-        Map<String, String> respuesta = new HashMap<>();
-        respuesta.put("mensaje", "Usuario registrado correctamente");
-        respuesta.put("email", email);
-        return ResponseEntity.ok(respuesta);
     }
 
     @PostMapping("/login")
@@ -70,27 +57,15 @@ public class AuthController {
             return ResponseEntity.badRequest().body(error);
         }
 
-        // Buscar usuario por email
-        String jpql = "SELECT u FROM Usuario u WHERE u.email = :emailParam";
-        TypedQuery<Usuario> query = em.createQuery(jpql, Usuario.class);
-        query.setParameter("emailParam", email);
-        List<Usuario> resultados = query.getResultList();
+        Optional<UsuarioDTO> resultado = usuarioService.login(email, password);
 
-        if (resultados.isEmpty()) {
+        if (resultado.isEmpty()) {
             Map<String, String> error = new HashMap<>();
             error.put("error", "Email o contraseña incorrectos");
             return ResponseEntity.status(401).body(error);
         }
 
-        Usuario usuario = resultados.get(0);
-
-        // Verificar password con BCrypt
-        if (!passwordEncoder.matches(password, usuario.getPasswordHash())) {
-            Map<String, String> error = new HashMap<>();
-            error.put("error", "Email o contraseña incorrectos");
-            return ResponseEntity.status(401).body(error);
-        }
-
+        UsuarioDTO usuario = resultado.get();
         Map<String, String> respuesta = new HashMap<>();
         respuesta.put("mensaje", "Login correcto");
         respuesta.put("email", usuario.getEmail());

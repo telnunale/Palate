@@ -1,10 +1,7 @@
 package palate_backend.controller;
 
-import palate_backend.model.Receta;
-import palate_backend.service.RecetaGeneradorService;
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.PersistenceContext;
-import jakarta.persistence.TypedQuery;
+import palate_backend.dto.RecetaDTO;
+import palate_backend.service.RecetaService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -12,31 +9,28 @@ import org.springframework.web.bind.annotation.*;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/recetas")
 public class RecetaController {
 
-    @PersistenceContext
-    private EntityManager em;
+    private final RecetaService recetaService;
 
     @Autowired
-    private RecetaGeneradorService recetaGeneradorService;
+    public RecetaController(RecetaService recetaService) {
+        this.recetaService = recetaService;
+    }
 
     @GetMapping
-    public List<Receta> obtenerTodas() {
-        String jpql = "SELECT r FROM Receta r";
-        TypedQuery<Receta> query = em.createQuery(jpql, Receta.class);
-        return query.getResultList();
+    public List<RecetaDTO> obtenerTodas() {
+        return recetaService.obtenerTodas();
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<Receta> obtenerPorId(@PathVariable Long id) {
-        Receta r = em.find(Receta.class, id);
-        if (r != null) {
-            return ResponseEntity.ok(r);
-        }
-        return ResponseEntity.notFound().build();
+    public ResponseEntity<RecetaDTO> obtenerPorId(@PathVariable Long id) {
+        Optional<RecetaDTO> receta = recetaService.obtenerPorId(id);
+        return receta.map(ResponseEntity::ok).orElse(ResponseEntity.notFound().build());
     }
 
     @PostMapping("/generar")
@@ -50,7 +44,28 @@ public class RecetaController {
         }
 
         try {
-            Receta receta = recetaGeneradorService.generarYGuardar(descripcion);
+            RecetaDTO receta = recetaService.generarYGuardar(descripcion);
+            return ResponseEntity.ok(receta);
+        } catch (Exception e) {
+            Map<String, String> error = new HashMap<>();
+            error.put("error", "Error al generar la receta: " + e.getMessage());
+            return ResponseEntity.internalServerError().body(error);
+        }
+    }
+
+    @PostMapping("/generar-con-aversion")
+    public ResponseEntity<Object> generarConAversion(@RequestBody Map<String, Object> datos) {
+        String descripcion = (String) datos.get("descripcion");
+        Long intoleranciaId = Long.valueOf(datos.get("intoleranciaId").toString());
+
+        if (descripcion == null || descripcion.trim().isEmpty()) {
+            Map<String, String> error = new HashMap<>();
+            error.put("error", "La descripción no puede estar vacía");
+            return ResponseEntity.badRequest().body(error);
+        }
+
+        try {
+            RecetaDTO receta = recetaService.generarYGuardarConAversion(descripcion, intoleranciaId);
             return ResponseEntity.ok(receta);
         } catch (Exception e) {
             Map<String, String> error = new HashMap<>();

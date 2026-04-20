@@ -21,7 +21,7 @@ public class Receta {
     @Column(name = "descripcion")
     private String descripcion;
 
-    @Column(name = "instrucciones", nullable = false)
+    @Column(name = "instrucciones", nullable = false, columnDefinition = "TEXT")
     private String instrucciones;
 
     @Column(name = "tiempo_preparacion", nullable = false)

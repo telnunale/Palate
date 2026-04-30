@@ -9,6 +9,7 @@ import palate_backend.enums.RolIngrediente;
 import palate_backend.model.*;
 import palate_backend.repository.AlimentoRepository;
 import palate_backend.repository.IntoleranciaUsuarioRepository;
+import palate_backend.repository.ProductoDespensaRepository;
 import palate_backend.repository.RecetaRepository;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,16 +29,19 @@ public class RecetaGeneradorService implements RecetaService {
     private final AlimentoRepository alimentoRepository;
     private final IAService iaService;
     private final IntoleranciaUsuarioRepository intoleranciaRepository;
+    private final ProductoDespensaRepository productoDespensaRepository;
 
     @Autowired
     public RecetaGeneradorService(RecetaRepository recetaRepository,
                                   AlimentoRepository alimentoRepository,
                                   IAService iaService,
-                                  IntoleranciaUsuarioRepository intoleranciaRepository) {
+                                  IntoleranciaUsuarioRepository intoleranciaRepository,
+                                  ProductoDespensaRepository productoDespensaRepository) {
         this.recetaRepository = recetaRepository;
         this.alimentoRepository = alimentoRepository;
         this.iaService = iaService;
         this.intoleranciaRepository = intoleranciaRepository;
+        this.productoDespensaRepository = productoDespensaRepository;
     }
 
     @Override
@@ -91,6 +95,44 @@ public class RecetaGeneradorService implements RecetaService {
                 intolerancia.getNivelRechazo(),
                 motivos
         );
+
+        Receta receta = construirYPersistirReceta(recetaMap);
+        return recetaToDTO(receta);
+    }
+
+    @Override
+    @Transactional
+    public RecetaDTO generarYGuardarConDespensa(Long usuarioId, Long intoleranciaId, String descripcion) throws Exception {
+        List<ProductoDespensa> productos = productoDespensaRepository.findByUsuarioIdAndConsumidoFalse(usuarioId);
+
+        List<String> ingredientesDespensa = new ArrayList<>();
+        for (ProductoDespensa p : productos) {
+            if (p.getAlimento() != null) {
+                ingredientesDespensa.add(p.getAlimento().getNombre());
+            }
+        }
+
+        Map<String, Object> recetaMap;
+
+        if (intoleranciaId != null) {
+            IntoleranciaUsuario intolerancia = intoleranciaRepository.findById(intoleranciaId)
+                    .orElseThrow(() -> new Exception("Intolerancia no encontrada"));
+
+            List<Map<String, Object>> motivos = new ArrayList<>();
+            for (MotivoRechazo m : intolerancia.getMotivos()) {
+                motivos.add(Map.of("tipo", m.getTipo().name(), "intensidad", m.getIntensidad()));
+            }
+
+            recetaMap = iaService.generarRecetaConDespensaYAversion(
+                    descripcion,
+                    ingredientesDespensa,
+                    intolerancia.getAlimento().getNombre(),
+                    intolerancia.getNivelRechazo(),
+                    motivos
+            );
+        } else {
+            recetaMap = iaService.generarRecetaConDespensa(descripcion, ingredientesDespensa);
+        }
 
         Receta receta = construirYPersistirReceta(recetaMap);
         return recetaToDTO(receta);

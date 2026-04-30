@@ -111,6 +111,111 @@ public class IAServiceImpl implements IAService {
         return llamarGemini(prompt);
     }
 
+    @Override
+    public Map<String, Object> generarRecetaConDespensa(String descripcion, List<String> ingredientesDespensa) throws Exception {
+        StringBuilder listaIngredientes = new StringBuilder();
+        for (String ingrediente : ingredientesDespensa) {
+            listaIngredientes.append("- ").append(ingrediente).append("\n");
+        }
+
+        String prompt = """
+                Eres un chef profesional. Genera una receta basada en esta descripción: "%s"
+
+                El usuario tiene los siguientes ingredientes disponibles en casa. Prioriza usarlos en la receta:
+                %s
+
+                %s
+                """.formatted(descripcion, listaIngredientes, getJsonRules());
+
+        return llamarGemini(prompt);
+    }
+
+    @Override
+    public Map<String, Object> generarRecetaConDespensaYAversion(String descripcion, List<String> ingredientesDespensa, String alimentoRechazado, int nivelRechazo, List<Map<String, Object>> motivos) throws Exception {
+        StringBuilder listaIngredientes = new StringBuilder();
+        for (String ingrediente : ingredientesDespensa) {
+            listaIngredientes.append("- ").append(ingrediente).append("\n");
+        }
+
+        StringBuilder aversionInfo = new StringBuilder();
+        aversionInfo.append("El usuario rechaza el ingrediente: ").append(alimentoRechazado);
+        aversionInfo.append(" con un nivel de rechazo de ").append(nivelRechazo).append("/10.\n");
+        aversionInfo.append("Los motivos del rechazo son:\n");
+
+        for (Map<String, Object> motivo : motivos) {
+            aversionInfo.append("- ").append(motivo.get("tipo"))
+                    .append(" (intensidad ").append(motivo.get("intensidad")).append("/5)\n");
+        }
+
+        String reglaDeNivel;
+        if (nivelRechazo <= 3) {
+            reglaDeNivel = """
+                El nivel de rechazo es BAJO (1-3). El ingrediente debe aparecer de forma OCULTA:
+                - Usar cantidades muy pequeñas
+                - Marcarlo con rol COMPLEMENTO o SECUNDARIO, nunca PROTAGONISTA
+                - Elegir métodos de preparación que camuflen el ingrediente
+                - El ingrediente NO debe ser visible ni reconocible en el plato
+                """;
+        } else if (nivelRechazo <= 6) {
+            reglaDeNivel = """
+                El nivel de rechazo es MEDIO (4-6). El ingrediente puede aparecer de forma moderada:
+                - Usar cantidades reducidas (50-70% de lo normal)
+                - Puede ser SECUNDARIO pero no PROTAGONISTA
+                - Elegir métodos de preparación que suavicen el ingrediente
+                """;
+        } else {
+            reglaDeNivel = """
+                El nivel de rechazo es ALTO (7-10). El usuario casi tolera el ingrediente:
+                - Usar cantidades normales o casi normales (80-100%)
+                - Puede ser PROTAGONISTA o SECUNDARIO
+                - Cualquier método de preparación es aceptable
+                """;
+        }
+
+        StringBuilder reglasMotivo = new StringBuilder();
+        for (Map<String, Object> motivo : motivos) {
+            String tipo = motivo.get("tipo").toString();
+            switch (tipo) {
+                case "TEXTURA":
+                    reglasMotivo.append("- Rechazo por TEXTURA: usar TRITURADO, EN_SALSA o FRITO. EVITAR: CRUDO, AL_VAPOR, HERVIDO.\n");
+                    break;
+                case "SABOR":
+                    reglasMotivo.append("- Rechazo por SABOR: combinar con sabores fuertes. Usar EN_SALSA, MARINADO u HORNEADO. EVITAR: CRUDO, HERVIDO.\n");
+                    break;
+                case "OLOR":
+                    reglasMotivo.append("- Rechazo por OLOR: cocción prolongada. Usar HORNEADO, FRITO o MARINADO. EVITAR: CRUDO, AL_VAPOR.\n");
+                    break;
+                case "COLOR":
+                    reglasMotivo.append("- Rechazo por COLOR: ocultar visualmente. Usar TRITURADO, EN_SALSA u HORNEADO. EVITAR: CRUDO.\n");
+                    break;
+            }
+        }
+
+        String prompt = """
+                Eres un chef profesional especializado en ayudar a personas con aversiones alimentarias.
+
+                %s
+
+                Reglas de nivel:
+                %s
+
+                Reglas según motivo de rechazo:
+                %s
+
+                El usuario quiere: "%s"
+
+                El usuario tiene además los siguientes ingredientes disponibles en casa (prioriza usarlos):
+                %s
+
+                Genera una receta que INCLUYA el ingrediente rechazado (%s) siguiendo las reglas anteriores
+                y que aproveche los ingredientes disponibles en la despensa del usuario.
+
+                %s
+                """.formatted(aversionInfo, reglaDeNivel, reglasMotivo, descripcion, listaIngredientes, alimentoRechazado, getJsonRules());
+
+        return llamarGemini(prompt);
+    }
+
     private String getJsonRules() {
         return """
                 Responde SOLO con un JSON válido, sin texto adicional, sin markdown, sin ```json```.

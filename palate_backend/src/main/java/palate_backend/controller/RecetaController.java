@@ -53,6 +53,24 @@ public class RecetaController {
         }
     }
 
+    @PostMapping("/generar-con-despensa")
+    public ResponseEntity<Object> generarConDespensa(@RequestBody Map<String, Object> datos) {
+        Long usuarioId = Long.valueOf(datos.get("usuarioId").toString());
+        String descripcion = datos.containsKey("descripcion") ? (String) datos.get("descripcion") : "";
+        Long intoleranciaId = datos.containsKey("intoleranciaId") && datos.get("intoleranciaId") != null
+                ? Long.valueOf(datos.get("intoleranciaId").toString())
+                : null;
+
+        try {
+            RecetaDTO receta = recetaService.generarYGuardarConDespensa(usuarioId, intoleranciaId, descripcion);
+            return ResponseEntity.ok(receta);
+        } catch (Exception e) {
+            Map<String, String> error = new HashMap<>();
+            error.put("error", "Error al generar la receta: " + e.getMessage());
+            return ResponseEntity.internalServerError().body(error);
+        }
+    }
+
     @PostMapping("/generar-con-aversion")
     public ResponseEntity<Object> generarConAversion(@RequestBody Map<String, Object> datos) {
         String descripcion = (String) datos.get("descripcion");

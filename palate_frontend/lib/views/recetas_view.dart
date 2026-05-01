@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../viewmodels/recetas_viewmodel.dart';
 import '../models/receta.dart';
-import 'login_view.dart';
 import 'receta_detalle.dart';
 
+/// Pantalla de listado de recetas con buscador y filtros por dificultad.
+/// Muestra la primera receta como tarjeta destacada y el resto en formato lista.
 class RecetasView extends StatefulWidget {
-  final String nombre;
-  const RecetasView({super.key, required this.nombre});
+  const RecetasView({super.key});
 
   @override
   State<RecetasView> createState() => _RecetasViewState();
@@ -14,6 +15,13 @@ class RecetasView extends StatefulWidget {
 
 class _RecetasViewState extends State<RecetasView> {
   final _viewModel = RecetasViewModel();
+  final _busquedaController = TextEditingController();
+
+  /// Filtro de dificultad activo: null significa "Todas"
+  String? _filtroDificultad;
+
+  /// Filtro de recetas generadas por IA
+  bool _soloIA = false;
 
   @override
   void initState() {
@@ -21,175 +29,87 @@ class _RecetasViewState extends State<RecetasView> {
     _viewModel.cargarRecetas().then((_) => setState(() {}));
   }
 
-  String _dificultadTexto(String dificultad) {
-    switch (dificultad) {
-      case 'FACIL':
-        return 'Fácil';
-      case 'MEDIA':
-        return 'Media';
-      case 'DIFICIL':
-        return 'Difícil';
-      default:
-        return dificultad;
-    }
+  @override
+  void dispose() {
+    _busquedaController.dispose();
+    super.dispose();
   }
 
-  // Imágenes placeholder para las recetas
+  /// Aplica los filtros activos sobre la lista completa de recetas.
+  /// Se filtra por texto de búsqueda, dificultad y si fue generada por IA.
+  List<Receta> get _recetasFiltradas {
+    return _viewModel.recetas.where((receta) {
+      final textoBusqueda = _busquedaController.text.toLowerCase();
+      final coincideTexto = textoBusqueda.isEmpty ||
+          receta.titulo.toLowerCase().contains(textoBusqueda) ||
+          receta.descripcion.toLowerCase().contains(textoBusqueda);
+
+      final coincideDificultad = _filtroDificultad == null ||
+          receta.dificultad == _filtroDificultad;
+
+      final coincideIA = !_soloIA || receta.generadaPorIa;
+
+      return coincideTexto && coincideDificultad && coincideIA;
+    }).toList();
+  }
+
+  /// Devuelve una imagen de Unsplash según el índice de la receta
   String _imagenReceta(int index) {
     final imagenes = [
-      'https://images.unsplash.com/photo-1546549032-9571cd6b27df?w=400',
-      'https://images.unsplash.com/photo-1512058564366-18510be2db19?w=400',
-      'https://images.unsplash.com/photo-1598515214211-89d3c73ae83b?w=400',
-      'https://images.unsplash.com/photo-1567620905732-2d1ec7ab7445?w=400',
-      'https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?w=400',
+      'https://images.unsplash.com/photo-1546549032-9571cd6b27df?w=600',
+      'https://images.unsplash.com/photo-1512058564366-18510be2db19?w=600',
+      'https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?w=600',
+      'https://images.unsplash.com/photo-1567620905732-2d1ec7ab7445?w=600',
+      'https://images.unsplash.com/photo-1598515214211-89d3c73ae83b?w=600',
     ];
     return imagenes[index % imagenes.length];
   }
 
+  /// Traduce el código de dificultad a texto en español
+  String _textoDificultad(String dificultad) {
+    switch (dificultad) {
+      case 'FACIL': return 'Fácil';
+      case 'MEDIA': return 'Media';
+      case 'DIFICIL': return 'Difícil';
+      default: return dificultad;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final recetasFiltradas = _recetasFiltradas;
+
     return Scaffold(
+      backgroundColor: const Color(0xFFfff8f6),
       body: SafeArea(
         child: _viewModel.cargando
             ? const Center(
-                child: CircularProgressIndicator(color: Color(0xFFB85C38)),
+                child: CircularProgressIndicator(color: Color(0xFF732b16)),
               )
             : CustomScrollView(
                 slivers: [
-                  // Header
+                  // ── Barra superior ──
+                  SliverToBoxAdapter(child: _AppBarRecetas()),
+
+                  // ── Buscador de recetas ──
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Row(
-                            children: [
-                              const Icon(
-                                Icons.restaurant_menu,
-                                color: Color(0xFFB85C38),
-                              ),
-                              const SizedBox(width: 8),
-                              const Text(
-                                'Palate',
-                                style: TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFFB85C38),
-                                  fontStyle: FontStyle.italic,
-                                ),
-                              ),
-                            ],
-                          ),
-                          IconButton(
-                            onPressed: () {
-                              Navigator.pushReplacement(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => const LoginView(),
-                                ),
-                              );
-                            },
-                            icon: const Icon(
-                              Icons.logout,
-                              color: Color(0xFF8A8A8A),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  // Bienvenida
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'SELECCIONADO PARA TI',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: const Color(0xFFB85C38).withOpacity(0.8),
-                              letterSpacing: 1.5,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Ola, ${widget.nombre}.',
-                            style: const TextStyle(
-                              fontSize: 32,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF2D2D2D),
-                              height: 1.2,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          const Text(
-                            'Descobre receitas pensadas para ti e supera os teus rexeitamentos alimentarios.',
-                            style: TextStyle(
-                              fontSize: 15,
-                              color: Color(0xFF8A8A8A),
-                              height: 1.4,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  // Botón "Comezar a cociñar"
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: 12,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFB85C38),
-                          borderRadius: BorderRadius.circular(24),
-                        ),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              'Comezar a cociñar',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w600,
-                                fontSize: 14,
-                              ),
-                            ),
-                            SizedBox(width: 6),
-                            Icon(
-                              Icons.arrow_forward,
-                              color: Colors.white,
-                              size: 18,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  // Buscador
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 24),
                       child: TextField(
+                        controller: _busquedaController,
+                        onChanged: (_) => setState(() {}),
+                        style: GoogleFonts.inter(fontSize: 15),
                         decoration: InputDecoration(
-                          hintText: 'Buscar receitas...',
-                          hintStyle: const TextStyle(color: Color(0xFFB0B0B0)),
+                          hintText: 'Buscar recetas...',
+                          hintStyle: GoogleFonts.inter(
+                            color: const Color(0xFF88726d).withOpacity(0.6),
+                          ),
                           prefixIcon: const Icon(
                             Icons.search,
-                            color: Color(0xFF8A8A8A),
+                            color: Color(0xFF88726d),
                           ),
                           filled: true,
-                          fillColor: const Color(0xFFF0EBE3),
+                          fillColor: const Color(0xFFfff0ed),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(16),
                             borderSide: BorderSide.none,
@@ -202,94 +122,224 @@ class _RecetasViewState extends State<RecetasView> {
                     ),
                   ),
 
-                  const SliverToBoxAdapter(child: SizedBox(height: 24)),
+                  // ── Chips de filtro por dificultad ──
+                  SliverToBoxAdapter(
+                    child: SizedBox(
+                      height: 52,
+                      child: ListView(
+                        scrollDirection: Axis.horizontal,
+                        padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
+                        children: [
+                          _ChipFiltro(
+                            etiqueta: 'Todas',
+                            activo: _filtroDificultad == null && !_soloIA,
+                            onTap: () => setState(() {
+                              _filtroDificultad = null;
+                              _soloIA = false;
+                            }),
+                          ),
+                          const SizedBox(width: 8),
+                          _ChipFiltro(
+                            etiqueta: 'Fácil',
+                            activo: _filtroDificultad == 'FACIL',
+                            onTap: () => setState(() {
+                              _filtroDificultad = 'FACIL';
+                              _soloIA = false;
+                            }),
+                          ),
+                          const SizedBox(width: 8),
+                          _ChipFiltro(
+                            etiqueta: 'Media',
+                            activo: _filtroDificultad == 'MEDIA',
+                            onTap: () => setState(() {
+                              _filtroDificultad = 'MEDIA';
+                              _soloIA = false;
+                            }),
+                          ),
+                          const SizedBox(width: 8),
+                          _ChipFiltro(
+                            etiqueta: 'Difícil',
+                            activo: _filtroDificultad == 'DIFICIL',
+                            onTap: () => setState(() {
+                              _filtroDificultad = 'DIFICIL';
+                              _soloIA = false;
+                            }),
+                          ),
+                          const SizedBox(width: 8),
+                          _ChipFiltroIA(
+                            activo: _soloIA,
+                            onTap: () => setState(() {
+                              _soloIA = !_soloIA;
+                              _filtroDificultad = null;
+                            }),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
 
-                  // Lista de recetas
-                  _viewModel.recetas.isEmpty
-                      ? const SliverToBoxAdapter(
-                          child: Center(
-                            child: Padding(
-                              padding: EdgeInsets.all(40),
-                              child: Text(
-                                'Non hai receitas dispoñibles',
-                                style: TextStyle(
-                                  color: Color(0xFF8A8A8A),
-                                  fontSize: 16,
-                                ),
-                              ),
+                  const SliverToBoxAdapter(child: SizedBox(height: 20)),
+
+                  // ── Tarjeta destacada (primera receta filtrada) ──
+                  if (recetasFiltradas.isNotEmpty)
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                        child: _TarjetaDestacada(
+                          receta: recetasFiltradas.first,
+                          imagenUrl: _imagenReceta(0),
+                          textoDificultad: _textoDificultad(
+                            recetasFiltradas.first.dificultad,
+                          ),
+                          onTap: () => _navegarADetalle(
+                            recetasFiltradas.first,
+                            _imagenReceta(0),
+                          ),
+                        ),
+                      ),
+                    ),
+
+                  const SliverToBoxAdapter(child: SizedBox(height: 16)),
+
+                  // ── Lista del resto de recetas ──
+                  SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) {
+                        // Se omite la primera receta porque ya aparece destacada
+                        final receta = recetasFiltradas[index + 1];
+                        return Padding(
+                          padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
+                          child: _TarjetaRecetaLista(
+                            receta: receta,
+                            imagenUrl: _imagenReceta(index + 1),
+                            textoDificultad: _textoDificultad(receta.dificultad),
+                            onTap: () => _navegarADetalle(
+                              receta,
+                              _imagenReceta(index + 1),
                             ),
                           ),
-                        )
-                      : SliverList(
-                          delegate: SliverChildBuilderDelegate((
-                            context,
-                            index,
-                          ) {
-                            final receta = _viewModel.recetas[index];
-                            return GestureDetector(
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => RecetaDetalleView(
-                                      recetaId: receta.id,
-                                      titulo: receta.titulo,
-                                      imagenUrl: _imagenReceta(index),
-                                    ),
-                                  ),
-                                );
-                              },
-                              child: _RecetaCard(
-                                receta: receta,
-                                imagenUrl: _imagenReceta(index),
-                                dificultadTexto: _dificultadTexto(
-                                  receta.dificultad,
+                        );
+                      },
+                      childCount: recetasFiltradas.length > 1
+                          ? recetasFiltradas.length - 1
+                          : 0,
+                    ),
+                  ),
+
+                  // Estado vacío cuando no hay resultados para los filtros aplicados
+                  if (recetasFiltradas.isEmpty)
+                    SliverToBoxAdapter(
+                      child: Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(40),
+                          child: Column(
+                            children: [
+                              const Icon(
+                                Icons.search_off,
+                                size: 48,
+                                color: Color(0xFFdbc1ba),
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                'No se encontraron recetas',
+                                style: GoogleFonts.newsreader(
+                                  fontSize: 18,
+                                  color: const Color(0xFF88726d),
                                 ),
                               ),
-                            );
-                          }, childCount: _viewModel.recetas.length),
+                            ],
+                          ),
                         ),
+                      ),
+                    ),
 
                   const SliverToBoxAdapter(child: SizedBox(height: 24)),
                 ],
               ),
       ),
+    );
+  }
 
-      // Bottom Navigation
-      bottomNavigationBar: Container(
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.only(
-            topLeft: Radius.circular(20),
-            topRight: Radius.circular(20),
-          ),
+  /// Navega a la pantalla de detalle de la receta seleccionada.
+  void _navegarADetalle(Receta receta, String imagenUrl) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => RecetaDetalleView(
+          recetaId: receta.id,
+          titulo: receta.titulo,
+          imagenUrl: imagenUrl,
         ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
+      ),
+    );
+  }
+}
+
+/// Barra superior con el logotipo de la app, campana y avatar.
+class _AppBarRecetas extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: const Color(0xFFFFFBF7),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
             children: [
-              _NavBarItem(
-                icon: Icons.home_outlined,
-                label: 'Inicio',
-                activo: false,
-              ),
-              _NavBarItem(
-                icon: Icons.restaurant_menu,
-                label: 'Receitas',
-                activo: true,
-              ),
-              _NavBarItem(
-                icon: Icons.bookmark_outline,
-                label: 'Gardadas',
-                activo: false,
-              ),
-              _NavBarItem(
-                icon: Icons.person_outline,
-                label: 'Perfil',
-                activo: false,
+              const Icon(Icons.restaurant_menu, color: Color(0xFF732b16)),
+              const SizedBox(width: 6),
+              Text(
+                'Palate',
+                style: GoogleFonts.newsreader(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w600,
+                  fontStyle: FontStyle.italic,
+                  color: const Color(0xFF732b16),
+                ),
               ),
             ],
+          ),
+          const Icon(Icons.notifications_outlined, color: Color(0xFF732b16)),
+        ],
+      ),
+    );
+  }
+}
+
+/// Chip de filtro para dificultad.
+class _ChipFiltro extends StatelessWidget {
+  final String etiqueta;
+  final bool activo;
+  final VoidCallback onTap;
+
+  const _ChipFiltro({
+    required this.etiqueta,
+    required this.activo,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: activo
+              ? const Color(0xFFfdb733)
+              : const Color(0xFFf4e5e2),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Text(
+          etiqueta,
+          style: GoogleFonts.inter(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.3,
+            color: activo
+                ? const Color(0xFF6d4a00)
+                : const Color(0xFF55433e),
           ),
         ),
       ),
@@ -297,114 +347,181 @@ class _RecetasViewState extends State<RecetasView> {
   }
 }
 
-// ==================== RECETA CARD ====================
+/// Chip especial para filtrar recetas generadas por IA.
+class _ChipFiltroIA extends StatelessWidget {
+  final bool activo;
+  final VoidCallback onTap;
 
-class _RecetaCard extends StatelessWidget {
+  const _ChipFiltroIA({required this.activo, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: activo
+              ? const Color(0xFF732b16).withOpacity(0.12)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: const Color(0xFF732b16).withOpacity(0.3),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.auto_awesome,
+              size: 14,
+              color: Color(0xFF732b16),
+            ),
+            const SizedBox(width: 4),
+            Text(
+              'Generado por IA',
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: const Color(0xFF732b16),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Tarjeta grande para la receta más destacada del listado.
+/// Ocupa el ancho completo y muestra la imagen en formato 16:10.
+class _TarjetaDestacada extends StatelessWidget {
   final Receta receta;
   final String imagenUrl;
-  final String dificultadTexto;
+  final String textoDificultad;
+  final VoidCallback onTap;
 
-  const _RecetaCard({
+  const _TarjetaDestacada({
     required this.receta,
     required this.imagenUrl,
-    required this.dificultadTexto,
+    required this.textoDificultad,
+    required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+    return GestureDetector(
+      onTap: onTap,
       child: Container(
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(32),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF91412b).withOpacity(0.06),
+              blurRadius: 20,
+              offset: const Offset(0, 4),
+            ),
+          ],
         ),
+        clipBehavior: Clip.hardEdge,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Imagen
-            ClipRRect(
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(24),
-                topRight: Radius.circular(24),
-              ),
+            // Imagen en proporción 16:10
+            AspectRatio(
+              aspectRatio: 16 / 10,
               child: Image.network(
                 imagenUrl,
-                height: 200,
-                width: double.infinity,
                 fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) {
-                  return Container(
-                    height: 200,
-                    color: const Color(0xFFF0EBE3),
-                    child: const Center(
-                      child: Icon(
-                        Icons.restaurant,
-                        size: 60,
-                        color: Color(0xFFB85C38),
-                      ),
-                    ),
-                  );
-                },
+                errorBuilder: (_, __, ___) => Container(
+                  color: const Color(0xFFf4e5e2),
+                  child: const Center(
+                    child: Icon(Icons.restaurant, size: 60, color: Color(0xFF732b16)),
+                  ),
+                ),
               ),
             ),
 
-            // Contenido
+            // Información de la receta
             Padding(
               padding: const EdgeInsets.all(20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    receta.titulo,
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF2D2D2D),
-                    ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          receta.titulo,
+                          style: GoogleFonts.newsreader(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w500,
+                            color: const Color(0xFF211a18),
+                          ),
+                        ),
+                      ),
+                      const Icon(
+                        Icons.favorite_border,
+                        color: Color(0xFF88726d),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 8),
-                  Text(
-                    receta.descripcion,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      color: Color(0xFF8A8A8A),
-                      height: 1.4,
-                    ),
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 16),
+
+                  // Metadatos: tiempo, dificultad, badge IA
                   Row(
                     children: [
-                      const Icon(
-                        Icons.access_time,
-                        size: 16,
-                        color: Color(0xFF8A8A8A),
-                      ),
+                      const Icon(Icons.access_time,
+                          size: 15, color: Color(0xFF88726d)),
                       const SizedBox(width: 4),
                       Text(
                         '${receta.tiempoTotal} min',
-                        style: const TextStyle(
+                        style: GoogleFonts.inter(
                           fontSize: 13,
-                          color: Color(0xFF8A8A8A),
+                          color: const Color(0xFF88726d),
                         ),
                       ),
                       const SizedBox(width: 16),
-                      const Icon(
-                        Icons.trending_up,
-                        size: 16,
-                        color: Color(0xFF8A8A8A),
-                      ),
+                      const Icon(Icons.restaurant,
+                          size: 15, color: Color(0xFF88726d)),
                       const SizedBox(width: 4),
                       Text(
-                        dificultadTexto,
-                        style: const TextStyle(
+                        textoDificultad,
+                        style: GoogleFonts.inter(
                           fontSize: 13,
-                          color: Color(0xFF8A8A8A),
+                          color: const Color(0xFF88726d),
                         ),
                       ),
+                      if (receta.generadaPorIa) ...[
+                        const SizedBox(width: 16),
+                        const Icon(Icons.auto_awesome,
+                            size: 15, color: Color(0xFF91412b)),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Receta IA',
+                          style: GoogleFonts.inter(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: const Color(0xFF91412b),
+                          ),
+                        ),
+                      ],
                     ],
+                  ),
+                  const SizedBox(height: 8),
+
+                  // Descripción truncada a 2 líneas
+                  Text(
+                    receta.descripcion,
+                    style: GoogleFonts.inter(
+                      fontSize: 13,
+                      color: const Color(0xFF55433e),
+                      height: 1.4,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ),
@@ -416,39 +533,141 @@ class _RecetaCard extends StatelessWidget {
   }
 }
 
-// ==================== NAV BAR ITEM ====================
+/// Tarjeta compacta para el resto de recetas en el listado.
+/// Muestra una miniatura cuadrada a la izquierda y la información a la derecha.
+class _TarjetaRecetaLista extends StatelessWidget {
+  final Receta receta;
+  final String imagenUrl;
+  final String textoDificultad;
+  final VoidCallback onTap;
 
-class _NavBarItem extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final bool activo;
-
-  const _NavBarItem({
-    required this.icon,
-    required this.label,
-    required this.activo,
+  const _TarjetaRecetaLista({
+    required this.receta,
+    required this.imagenUrl,
+    required this.textoDificultad,
+    required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(
-          icon,
-          color: activo ? const Color(0xFFB85C38) : const Color(0xFF8A8A8A),
-          size: 24,
-        ),
-        const SizedBox(height: 4),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 11,
-            color: activo ? const Color(0xFFB85C38) : const Color(0xFF8A8A8A),
-            fontWeight: activo ? FontWeight.w600 : FontWeight.normal,
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: receta.generadaPorIa
+              ? const Color(0xFF732b16).withOpacity(0.04)
+              : Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(
+            color: receta.generadaPorIa
+                ? const Color(0xFF732b16).withOpacity(0.12)
+                : const Color(0xFFdbc1ba).withOpacity(0.3),
           ),
         ),
-      ],
+        child: Row(
+          children: [
+            // Miniatura
+            ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: Stack(
+                children: [
+                  Image.network(
+                    imagenUrl,
+                    width: 88,
+                    height: 88,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => Container(
+                      width: 88,
+                      height: 88,
+                      color: const Color(0xFFf4e5e2),
+                      child: const Icon(Icons.restaurant, color: Color(0xFF732b16)),
+                    ),
+                  ),
+                  // Overlay de IA sobre la miniatura
+                  if (receta.generadaPorIa)
+                    Positioned.fill(
+                      child: Container(
+                        color: const Color(0xFF732b16).withOpacity(0.15),
+                        child: const Center(
+                          child: Icon(
+                            Icons.auto_awesome,
+                            color: Colors.white,
+                            size: 20,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 14),
+
+            // Información textual
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    receta.titulo,
+                    style: GoogleFonts.newsreader(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w500,
+                      color: receta.generadaPorIa
+                          ? const Color(0xFF732b16)
+                          : const Color(0xFF211a18),
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Text(
+                        '${receta.tiempoTotal} min',
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          color: const Color(0xFF88726d),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        '•',
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          color: const Color(0xFF88726d),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        textoDificultad,
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          color: const Color(0xFF88726d),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (receta.generadaPorIa) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      'Personalizado para ti',
+                      style: GoogleFonts.inter(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.5,
+                        color: const Color(0xFF732b16),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+
+            const Icon(Icons.chevron_right, color: Color(0xFFdbc1ba)),
+          ],
+        ),
+      ),
     );
   }
 }

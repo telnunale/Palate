@@ -11,5 +11,9 @@ public interface IntoleranciaService {
 
     void crear(Long usuarioId, Long alimentoId, int nivelRechazo, List<Map<String, Object>> motivos);
 
+    void actualizar(Long id, int nivelRechazo, List<Map<String, Object>> motivos);
+
     void eliminar(Long id);
+
+    IntoleranciaDTO registrarFeedback(Long intoleranciaId, boolean tolerado);
 }

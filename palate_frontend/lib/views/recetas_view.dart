@@ -1,32 +1,42 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../viewmodels/recetas_viewmodel.dart';
+import '../models/intolerancia.dart';
 import '../models/receta.dart';
+import '../models/usuario.dart';
+import '../utils/imagen_optim.dart';
 import 'receta_detalle.dart';
 
-/// Pantalla de listado de recetas con buscador y filtros por dificultad.
-/// Muestra la primera receta como tarjeta destacada y el resto en formato lista.
 class RecetasView extends StatefulWidget {
-  const RecetasView({super.key});
+  final Usuario usuario;
+
+  const RecetasView({super.key, required this.usuario});
 
   @override
-  State<RecetasView> createState() => _RecetasViewState();
+  State<RecetasView> createState() => RecetasViewState();
 }
 
-class _RecetasViewState extends State<RecetasView> {
+class RecetasViewState extends State<RecetasView> {
   final _viewModel = RecetasViewModel();
   final _busquedaController = TextEditingController();
 
-  /// Filtro de dificultad activo: null significa "Todas"
-  String? _filtroDificultad;
-
-  /// Filtro de recetas generadas por IA
   bool _soloIA = false;
+  int? _filtroTiempo;
+  final Set<int> _aversionesFiltro = <int>{};
 
   @override
   void initState() {
     super.initState();
-    _viewModel.cargarRecetas().then((_) => setState(() {}));
+    recargar();
+  }
+
+  void recargar() {
+    _viewModel.cargarRecetas().then((_) {
+      if (mounted) setState(() {});
+    });
+    _viewModel.cargarAversiones(widget.usuario.id).then((_) {
+      if (mounted) setState(() {});
+    });
   }
 
   @override
@@ -35,37 +45,86 @@ class _RecetasViewState extends State<RecetasView> {
     super.dispose();
   }
 
-  /// Aplica los filtros activos sobre la lista completa de recetas.
-  /// Se filtra por texto de búsqueda, dificultad y si fue generada por IA.
   List<Receta> get _recetasFiltradas {
     return _viewModel.recetas.where((receta) {
-      final textoBusqueda = _busquedaController.text.toLowerCase();
+      final textoBusqueda = _busquedaController.text.trim().toLowerCase();
       final coincideTexto = textoBusqueda.isEmpty ||
           receta.titulo.toLowerCase().contains(textoBusqueda) ||
           receta.descripcion.toLowerCase().contains(textoBusqueda);
 
-      final coincideDificultad = _filtroDificultad == null ||
-          receta.dificultad == _filtroDificultad;
-
       final coincideIA = !_soloIA || receta.generadaPorIa;
 
-      return coincideTexto && coincideDificultad && coincideIA;
+      final coincideTiempo = _coincideFiltroTiempo(receta);
+
+      final coincideAversion = _coincideFiltroAversion(receta);
+
+      return coincideTexto &&
+          coincideIA &&
+          coincideTiempo &&
+          coincideAversion;
     }).toList();
   }
 
-  /// Devuelve una imagen de Unsplash según el índice de la receta
-  String _imagenReceta(int index) {
-    final imagenes = [
-      'https://images.unsplash.com/photo-1546549032-9571cd6b27df?w=600',
-      'https://images.unsplash.com/photo-1512058564366-18510be2db19?w=600',
-      'https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?w=600',
-      'https://images.unsplash.com/photo-1567620905732-2d1ec7ab7445?w=600',
-      'https://images.unsplash.com/photo-1598515214211-89d3c73ae83b?w=600',
-    ];
-    return imagenes[index % imagenes.length];
+  int _idAlimento(Intolerancia a) => a.alimentoId;
+
+  static const Map<String, Set<String>> _metodosContraindicadosPorMotivo = {
+    'TEXTURA': {'CRUDO', 'AL_VAPOR', 'HERVIDO'},
+    'SABOR': {'CRUDO', 'HERVIDO'},
+    'OLOR': {'CRUDO', 'AL_VAPOR'},
+    'COLOR': {'CRUDO'},
+  };
+
+  bool _coincideFiltroAversion(Receta receta) {
+    if (_aversionesFiltro.isEmpty) return true;
+
+    for (final aversion in _viewModel.aversiones) {
+      if (!_aversionesFiltro.contains(aversion.alimentoId)) continue;
+      if (!receta.idsAlimentos.contains(aversion.alimentoId)) continue;
+
+      final metodos = receta.metodosPorAlimento[aversion.alimentoId];
+      if (metodos == null || metodos.isEmpty) return true;
+
+      final contraindicados = _contraindicadosParaAversion(aversion);
+      if (contraindicados.isEmpty) return true;
+
+      if (metodos.any((m) => !contraindicados.contains(m))) return true;
+    }
+    return false;
   }
 
-  /// Traduce el código de dificultad a texto en español
+  Set<String> _contraindicadosParaAversion(Intolerancia aversion) {
+    final resultado = <String>{};
+    for (final motivo in aversion.motivos) {
+      final tipo = motivo['tipo'] as String?;
+      if (tipo == null) continue;
+      final lista = _metodosContraindicadosPorMotivo[tipo];
+      if (lista != null) resultado.addAll(lista);
+    }
+    return resultado;
+  }
+
+  bool _coincideFiltroTiempo(Receta receta) {
+    if (_filtroTiempo == null) return true;
+    final total = receta.tiempoTotal;
+    if (_filtroTiempo == 45) return total >= 45;
+    return total <= _filtroTiempo!;
+  }
+
+  String _imagenReceta(Receta receta, int index) {
+    if (receta.imagenUrl != null && receta.imagenUrl!.isNotEmpty) {
+      return receta.imagenUrl!;
+    }
+    return _fallbackImagenes[index % _fallbackImagenes.length];
+  }
+
+  static const List<String> _fallbackImagenes = [
+    'https://images.unsplash.com/photo-1546549032-9571cd6b27df?w=600',
+    'https://images.unsplash.com/photo-1512058564366-18510be2db19?w=600',
+    'https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?w=600',
+    'https://images.unsplash.com/photo-1567620905732-2d1ec7ab7445?w=600',
+    'https://images.unsplash.com/photo-1598515214211-89d3c73ae83b?w=600',
+  ];
+
   String _textoDificultad(String dificultad) {
     switch (dificultad) {
       case 'FACIL': return 'Fácil';
@@ -88,10 +147,8 @@ class _RecetasViewState extends State<RecetasView> {
               )
             : CustomScrollView(
                 slivers: [
-                  // ── Barra superior ──
                   SliverToBoxAdapter(child: _AppBarRecetas()),
 
-                  // ── Buscador de recetas ──
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
@@ -122,7 +179,6 @@ class _RecetasViewState extends State<RecetasView> {
                     ),
                   ),
 
-                  // ── Chips de filtro por dificultad ──
                   SliverToBoxAdapter(
                     child: SizedBox(
                       height: 52,
@@ -132,37 +188,37 @@ class _RecetasViewState extends State<RecetasView> {
                         children: [
                           _ChipFiltro(
                             etiqueta: 'Todas',
-                            activo: _filtroDificultad == null && !_soloIA,
+                            activo: !_soloIA &&
+                                _filtroTiempo == null &&
+                                _aversionesFiltro.isEmpty,
                             onTap: () => setState(() {
-                              _filtroDificultad = null;
                               _soloIA = false;
+                              _filtroTiempo = null;
+                              _aversionesFiltro.clear();
                             }),
                           ),
                           const SizedBox(width: 8),
                           _ChipFiltro(
-                            etiqueta: 'Fácil',
-                            activo: _filtroDificultad == 'FACIL',
+                            etiqueta: '15 min',
+                            activo: _filtroTiempo == 15,
                             onTap: () => setState(() {
-                              _filtroDificultad = 'FACIL';
-                              _soloIA = false;
+                              _filtroTiempo = _filtroTiempo == 15 ? null : 15;
                             }),
                           ),
                           const SizedBox(width: 8),
                           _ChipFiltro(
-                            etiqueta: 'Media',
-                            activo: _filtroDificultad == 'MEDIA',
+                            etiqueta: '30 min',
+                            activo: _filtroTiempo == 30,
                             onTap: () => setState(() {
-                              _filtroDificultad = 'MEDIA';
-                              _soloIA = false;
+                              _filtroTiempo = _filtroTiempo == 30 ? null : 30;
                             }),
                           ),
                           const SizedBox(width: 8),
                           _ChipFiltro(
-                            etiqueta: 'Difícil',
-                            activo: _filtroDificultad == 'DIFICIL',
+                            etiqueta: '45+ min',
+                            activo: _filtroTiempo == 45,
                             onTap: () => setState(() {
-                              _filtroDificultad = 'DIFICIL';
-                              _soloIA = false;
+                              _filtroTiempo = _filtroTiempo == 45 ? null : 45;
                             }),
                           ),
                           const SizedBox(width: 8),
@@ -170,7 +226,6 @@ class _RecetasViewState extends State<RecetasView> {
                             activo: _soloIA,
                             onTap: () => setState(() {
                               _soloIA = !_soloIA;
-                              _filtroDificultad = null;
                             }),
                           ),
                         ],
@@ -178,22 +233,52 @@ class _RecetasViewState extends State<RecetasView> {
                     ),
                   ),
 
-                  const SliverToBoxAdapter(child: SizedBox(height: 20)),
+                  if (_viewModel.aversiones.isNotEmpty)
+                    SliverToBoxAdapter(
+                      child: SizedBox(
+                        height: 44,
+                        child: ListView.builder(
+                          scrollDirection: Axis.horizontal,
+                          padding: const EdgeInsets.fromLTRB(24, 4, 24, 0),
+                          itemCount: _viewModel.aversiones.length,
+                          itemBuilder: (context, index) {
+                            final aversion = _viewModel.aversiones[index];
+                            final id = _idAlimento(aversion);
+                            final activo = _aversionesFiltro.contains(id);
+                            return Padding(
+                              padding: const EdgeInsets.only(right: 8),
+                              child: _ChipFiltroAversion(
+                                etiqueta: aversion.nombreAlimento,
+                                activo: activo,
+                                onTap: () => setState(() {
+                                  if (activo) {
+                                    _aversionesFiltro.remove(id);
+                                  } else {
+                                    _aversionesFiltro.add(id);
+                                  }
+                                }),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
 
-                  // ── Tarjeta destacada (primera receta filtrada) ──
+                  const SliverToBoxAdapter(child: SizedBox(height: 12)),
+
                   if (recetasFiltradas.isNotEmpty)
                     SliverToBoxAdapter(
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 24),
                         child: _TarjetaDestacada(
                           receta: recetasFiltradas.first,
-                          imagenUrl: _imagenReceta(0),
+                          imagenUrl: _imagenReceta(recetasFiltradas.first, 0),
                           textoDificultad: _textoDificultad(
                             recetasFiltradas.first.dificultad,
                           ),
                           onTap: () => _navegarADetalle(
                             recetasFiltradas.first,
-                            _imagenReceta(0),
+                            _imagenReceta(recetasFiltradas.first, 0),
                           ),
                         ),
                       ),
@@ -201,21 +286,19 @@ class _RecetasViewState extends State<RecetasView> {
 
                   const SliverToBoxAdapter(child: SizedBox(height: 16)),
 
-                  // ── Lista del resto de recetas ──
                   SliverList(
                     delegate: SliverChildBuilderDelegate(
                       (context, index) {
-                        // Se omite la primera receta porque ya aparece destacada
                         final receta = recetasFiltradas[index + 1];
                         return Padding(
                           padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
                           child: _TarjetaRecetaLista(
                             receta: receta,
-                            imagenUrl: _imagenReceta(index + 1),
+                            imagenUrl: _imagenReceta(receta, index + 1),
                             textoDificultad: _textoDificultad(receta.dificultad),
                             onTap: () => _navegarADetalle(
                               receta,
-                              _imagenReceta(index + 1),
+                              _imagenReceta(receta, index + 1),
                             ),
                           ),
                         );
@@ -226,7 +309,6 @@ class _RecetasViewState extends State<RecetasView> {
                     ),
                   ),
 
-                  // Estado vacío cuando no hay resultados para los filtros aplicados
                   if (recetasFiltradas.isEmpty)
                     SliverToBoxAdapter(
                       child: Center(
@@ -260,7 +342,6 @@ class _RecetasViewState extends State<RecetasView> {
     );
   }
 
-  /// Navega a la pantalla de detalle de la receta seleccionada.
   void _navegarADetalle(Receta receta, String imagenUrl) {
     Navigator.push(
       context,
@@ -269,13 +350,13 @@ class _RecetasViewState extends State<RecetasView> {
           recetaId: receta.id,
           titulo: receta.titulo,
           imagenUrl: imagenUrl,
+          usuario: widget.usuario,
         ),
       ),
     );
   }
 }
 
-/// Barra superior con el logotipo de la app, campana y avatar.
 class _AppBarRecetas extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
@@ -283,31 +364,24 @@ class _AppBarRecetas extends StatelessWidget {
       color: const Color(0xFFFFFBF7),
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
-            children: [
-              const Icon(Icons.restaurant_menu, color: Color(0xFF732b16)),
-              const SizedBox(width: 6),
-              Text(
-                'Palate',
-                style: GoogleFonts.newsreader(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w600,
-                  fontStyle: FontStyle.italic,
-                  color: const Color(0xFF732b16),
-                ),
-              ),
-            ],
+          const Icon(Icons.restaurant_menu, color: Color(0xFF732b16)),
+          const SizedBox(width: 6),
+          Text(
+            'Palate',
+            style: GoogleFonts.newsreader(
+              fontSize: 22,
+              fontWeight: FontWeight.w600,
+              fontStyle: FontStyle.italic,
+              color: const Color(0xFF732b16),
+            ),
           ),
-          const Icon(Icons.notifications_outlined, color: Color(0xFF732b16)),
         ],
       ),
     );
   }
 }
 
-/// Chip de filtro para dificultad.
 class _ChipFiltro extends StatelessWidget {
   final String etiqueta;
   final bool activo;
@@ -347,7 +421,56 @@ class _ChipFiltro extends StatelessWidget {
   }
 }
 
-/// Chip especial para filtrar recetas generadas por IA.
+class _ChipFiltroAversion extends StatelessWidget {
+  final String etiqueta;
+  final bool activo;
+  final VoidCallback onTap;
+
+  const _ChipFiltroAversion({
+    required this.etiqueta,
+    required this.activo,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: activo
+              ? const Color(0xFF732b16)
+              : const Color(0xFF732b16).withOpacity(0.08),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: const Color(0xFF732b16).withOpacity(0.4),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.heart_broken_outlined,
+              size: 12,
+              color: activo ? Colors.white : const Color(0xFF732b16),
+            ),
+            const SizedBox(width: 4),
+            Text(
+              etiqueta,
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: activo ? Colors.white : const Color(0xFF732b16),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _ChipFiltroIA extends StatelessWidget {
   final bool activo;
   final VoidCallback onTap;
@@ -393,8 +516,6 @@ class _ChipFiltroIA extends StatelessWidget {
   }
 }
 
-/// Tarjeta grande para la receta más destacada del listado.
-/// Ocupa el ancho completo y muestra la imagen en formato 16:10.
 class _TarjetaDestacada extends StatelessWidget {
   final Receta receta;
   final String imagenUrl;
@@ -428,49 +549,41 @@ class _TarjetaDestacada extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Imagen en proporción 16:10
             AspectRatio(
               aspectRatio: 16 / 10,
-              child: Image.network(
-                imagenUrl,
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => Container(
-                  color: const Color(0xFFf4e5e2),
-                  child: const Center(
-                    child: Icon(Icons.restaurant, size: 60, color: Color(0xFF732b16)),
-                  ),
-                ),
+              child: Builder(
+                builder: (ctx) {
+                  final ancho = MediaQuery.of(ctx).size.width - 48;
+                  return Image.network(
+                    ImagenOptim.paraAncho(ctx, imagenUrl, ancho),
+                    fit: BoxFit.cover,
+                    cacheWidth: ImagenOptim.anchoFisico(ctx, ancho),
+                    errorBuilder: (_, __, ___) => Container(
+                      color: const Color(0xFFf4e5e2),
+                      child: const Center(
+                        child: Icon(Icons.restaurant, size: 60, color: Color(0xFF732b16)),
+                      ),
+                    ),
+                  );
+                },
               ),
             ),
 
-            // Información de la receta
             Padding(
               padding: const EdgeInsets.all(20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          receta.titulo,
-                          style: GoogleFonts.newsreader(
-                            fontSize: 22,
-                            fontWeight: FontWeight.w500,
-                            color: const Color(0xFF211a18),
-                          ),
-                        ),
-                      ),
-                      const Icon(
-                        Icons.favorite_border,
-                        color: Color(0xFF88726d),
-                      ),
-                    ],
+                  Text(
+                    receta.titulo,
+                    style: GoogleFonts.newsreader(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w500,
+                      color: const Color(0xFF211a18),
+                    ),
                   ),
                   const SizedBox(height: 8),
 
-                  // Metadatos: tiempo, dificultad, badge IA
                   Row(
                     children: [
                       const Icon(Icons.access_time,
@@ -494,6 +607,19 @@ class _TarjetaDestacada extends StatelessWidget {
                           color: const Color(0xFF88726d),
                         ),
                       ),
+                      if (receta.caloriasTotal != null) ...[
+                        const SizedBox(width: 16),
+                        const Icon(Icons.bolt,
+                            size: 15, color: Color(0xFF88726d)),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${receta.caloriasTotal!.round()} kcal',
+                          style: GoogleFonts.inter(
+                            fontSize: 13,
+                            color: const Color(0xFF88726d),
+                          ),
+                        ),
+                      ],
                       if (receta.generadaPorIa) ...[
                         const SizedBox(width: 16),
                         const Icon(Icons.auto_awesome,
@@ -512,7 +638,6 @@ class _TarjetaDestacada extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
 
-                  // Descripción truncada a 2 líneas
                   Text(
                     receta.descripcion,
                     style: GoogleFonts.inter(
@@ -533,8 +658,6 @@ class _TarjetaDestacada extends StatelessWidget {
   }
 }
 
-/// Tarjeta compacta para el resto de recetas en el listado.
-/// Muestra una miniatura cuadrada a la izquierda y la información a la derecha.
 class _TarjetaRecetaLista extends StatelessWidget {
   final Receta receta;
   final String imagenUrl;
@@ -567,16 +690,16 @@ class _TarjetaRecetaLista extends StatelessWidget {
         ),
         child: Row(
           children: [
-            // Miniatura
             ClipRRect(
               borderRadius: BorderRadius.circular(16),
               child: Stack(
                 children: [
                   Image.network(
-                    imagenUrl,
+                    ImagenOptim.paraAncho(context, imagenUrl, 88),
                     width: 88,
                     height: 88,
                     fit: BoxFit.cover,
+                    cacheWidth: ImagenOptim.anchoFisico(context, 88),
                     errorBuilder: (_, __, ___) => Container(
                       width: 88,
                       height: 88,
@@ -584,7 +707,6 @@ class _TarjetaRecetaLista extends StatelessWidget {
                       child: const Icon(Icons.restaurant, color: Color(0xFF732b16)),
                     ),
                   ),
-                  // Overlay de IA sobre la miniatura
                   if (receta.generadaPorIa)
                     Positioned.fill(
                       child: Container(
@@ -603,7 +725,6 @@ class _TarjetaRecetaLista extends StatelessWidget {
             ),
             const SizedBox(width: 14),
 
-            // Información textual
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,

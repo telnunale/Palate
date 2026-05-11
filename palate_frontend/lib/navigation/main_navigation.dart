@@ -5,12 +5,9 @@ import '../views/home_view.dart';
 import '../views/recetas_view.dart';
 import '../views/despensa_view.dart';
 import '../views/perfil_view.dart';
+import '../views/login_view.dart';
 
-/// Pantalla raíz de la aplicación tras el inicio de sesión.
-/// Contiene la barra de navegación inferior y gestiona qué
-/// sección se muestra en cada momento.
 class MainNavigation extends StatefulWidget {
-  /// Usuario autenticado, pasado desde la pantalla de login
   final Usuario usuario;
 
   const MainNavigation({super.key, required this.usuario});
@@ -20,37 +17,55 @@ class MainNavigation extends StatefulWidget {
 }
 
 class _MainNavigationState extends State<MainNavigation> {
-  /// Índice de la pestaña actualmente seleccionada
   int _indiceSeleccionado = 0;
 
-  /// Las cuatro secciones principales de la aplicación.
-  /// Se usa [IndexedStack] para mantener el estado de cada pestaña
-  /// al cambiar entre ellas.
+  final GlobalKey<HomeViewState> _homeKey = GlobalKey<HomeViewState>();
+  final GlobalKey<RecetasViewState> _recetasKey = GlobalKey<RecetasViewState>();
+  final GlobalKey<PerfilViewState> _perfilKey = GlobalKey<PerfilViewState>();
+
   late final List<Widget> _pantallas;
 
   @override
   void initState() {
     super.initState();
     _pantallas = [
-      HomeView(usuario: widget.usuario),
-      const RecetasView(),
-      const DespensaView(),
-      const PerfilView(),
+      HomeView(key: _homeKey, usuario: widget.usuario),
+      RecetasView(key: _recetasKey, usuario: widget.usuario),
+      DespensaView(usuarioId: widget.usuario.id),
+      PerfilView(
+        key: _perfilKey,
+        usuario: widget.usuario,
+        onLogout: _cerrarSesion,
+      ),
     ];
   }
 
-  /// Cambia la pestaña visible al tocar un elemento de la barra inferior.
   void _onTabSeleccionado(int indice) {
     setState(() {
       _indiceSeleccionado = indice;
     });
+
+    if (indice == 0) {
+      _homeKey.currentState?.recargar();
+    } else if (indice == 1) {
+      _recetasKey.currentState?.recargar();
+    } else if (indice == 3) {
+      _perfilKey.currentState?.recargar();
+    }
+  }
+
+  void _cerrarSesion() {
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => const LoginView()),
+      (_) => false,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // IndexedStack mantiene el estado de cada pestaña activa en memoria,
-      // evitando recargar datos al volver a una pestaña ya visitada
+      // IndexedStack mantiene el estado de cada pestana al cambiar entre ellas
       body: IndexedStack(
         index: _indiceSeleccionado,
         children: _pantallas,
@@ -63,9 +78,6 @@ class _MainNavigationState extends State<MainNavigation> {
   }
 }
 
-/// Widget de la barra de navegación inferior personalizada.
-/// Replica el diseño del sistema con fondo translúcido, esquinas
-/// superiores redondeadas e indicador de pestaña activa.
 class _BarraNavegacion extends StatelessWidget {
   final int indiceSeleccionado;
   final ValueChanged<int> onTabSeleccionado;
@@ -140,8 +152,6 @@ class _BarraNavegacion extends StatelessWidget {
   }
 }
 
-/// Elemento individual de la barra de navegación.
-/// Muestra icono y etiqueta, con fondo destacado cuando está activo.
 class _ItemNavegacion extends StatelessWidget {
   final IconData icono;
   final IconData iconoActivo;

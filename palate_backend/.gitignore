@@ -1,6 +1,14 @@
 HELP.md
 target/
+data/
 .mvn/wrapper/maven-wrapper.jar
+
+# Credenciales locales (no commit)
+src/main/resources/application-local.properties
+
+# Herramienta interna de revision visual de imagenes generadas, no se
+# despliega ni se sube al repo. Solo util en desarrollo local.
+src/main/java/palate_backend/controller/PreviewImagenesController.java
 !**/src/main/**/target/
 !**/src/test/**/target/
 

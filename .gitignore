@@ -1,1 +1,2 @@
-palate_backend/src/main/resources/application.properties
+# Credenciales locales (no commit)
+palate_backend/src/main/resources/application-local.properties

@@ -48,6 +48,9 @@ public class RecetaAlimento {
     @Column(name = "notas")
     private String notas;
 
+    @Column(name = "descripcion_nutricional", length = 200)
+    private String descripcionNutricional;
+
     public RecetaAlimento() {
     }
 
@@ -138,6 +141,14 @@ public class RecetaAlimento {
 
     public void setNotas(String notas) {
         this.notas = notas;
+    }
+
+    public String getDescripcionNutricional() {
+        return descripcionNutricional;
+    }
+
+    public void setDescripcionNutricional(String descripcionNutricional) {
+        this.descripcionNutricional = descripcionNutricional;
     }
 
     @Override

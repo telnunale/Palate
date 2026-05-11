@@ -30,18 +30,96 @@ public class RecetaGeneradorService implements RecetaService {
     private final IAService iaService;
     private final IntoleranciaUsuarioRepository intoleranciaRepository;
     private final ProductoDespensaRepository productoDespensaRepository;
+    private final ClasificadorImagen clasificadorImagen;
+    private final PexelsImagenService pexelsImagenService;
+    private final FluxImagenService fluxImagenService;
+    private final EdamamNutricionService edamamNutricionService;
 
     @Autowired
     public RecetaGeneradorService(RecetaRepository recetaRepository,
                                   AlimentoRepository alimentoRepository,
                                   IAService iaService,
                                   IntoleranciaUsuarioRepository intoleranciaRepository,
-                                  ProductoDespensaRepository productoDespensaRepository) {
+                                  ProductoDespensaRepository productoDespensaRepository,
+                                  ClasificadorImagen clasificadorImagen,
+                                  PexelsImagenService pexelsImagenService,
+                                  FluxImagenService fluxImagenService,
+                                  EdamamNutricionService edamamNutricionService) {
         this.recetaRepository = recetaRepository;
         this.alimentoRepository = alimentoRepository;
         this.iaService = iaService;
         this.intoleranciaRepository = intoleranciaRepository;
         this.productoDespensaRepository = productoDespensaRepository;
+        this.clasificadorImagen = clasificadorImagen;
+        this.pexelsImagenService = pexelsImagenService;
+        this.fluxImagenService = fluxImagenService;
+        this.edamamNutricionService = edamamNutricionService;
+    }
+
+    /**
+     * Resuelve la imagen en cascada: FLUX -> Pexels -> pool tematico.
+     */
+    String resolverImagen(Receta receta) {
+        Optional<String> flux = fluxImagenService.generarYGuardarConPrompt(
+                receta.getId(), construirPromptEnriquecido(receta));
+        if (flux.isPresent()) return flux.get();
+
+        Optional<String> pexels = pexelsImagenService.buscarImagen(receta.getTitulo());
+        return pexels.orElseGet(() -> clasificadorImagen.elegirImagen(receta));
+    }
+
+    @Override
+    @Transactional
+    public Optional<String> regenerarImagen(Long recetaId) {
+        Optional<Receta> opt = recetaRepository.findById(recetaId);
+        if (opt.isEmpty()) return Optional.empty();
+
+        Receta receta = opt.get();
+        String nueva = resolverImagen(receta);
+        receta.setImagenUrl(nueva);
+        recetaRepository.save(receta);
+        return Optional.of(nueva);
+    }
+
+    private String construirPromptEnriquecido(Receta receta) {
+        StringBuilder ingredientes = new StringBuilder();
+        if (receta.getIngredientes() != null) {
+            int contador = 0;
+            for (RecetaAlimento ra : receta.getIngredientes()) {
+                if (ra.getAlimento() == null) continue;
+                if (contador > 0) ingredientes.append(", ");
+                ingredientes.append(ra.getAlimento().getNombre().toLowerCase());
+                contador++;
+                if (contador >= 5) break;
+            }
+        }
+
+        String metodo = "";
+        if (receta.getIngredientes() != null) {
+            for (RecetaAlimento ra : receta.getIngredientes()) {
+                if (ra.getRol() == RolIngrediente.PROTAGONISTA
+                        && ra.getMetodoPreparacion() != null) {
+                    metodo = ra.getMetodoPreparacion().name().toLowerCase().replace('_', ' ');
+                    break;
+                }
+            }
+        }
+
+        StringBuilder prompt = new StringBuilder();
+        prompt.append("Professional food photography of \"")
+                .append(receta.getTitulo())
+                .append("\", a traditional Spanish/Mediterranean dish");
+        if (!ingredientes.isEmpty()) {
+            prompt.append(". Made with: ").append(ingredientes);
+        }
+        if (!metodo.isEmpty()) {
+            prompt.append(". Cooking method: ").append(metodo);
+        }
+        prompt.append(". Overhead shot, neutral ceramic plate, warm natural ")
+                .append("lighting, terracotta tones, appetizing, high detail, ")
+                .append("authentic Mediterranean cuisine, no text, no watermark, ")
+                .append("no people, no hands");
+        return prompt.toString();
     }
 
     @Override
@@ -68,7 +146,8 @@ public class RecetaGeneradorService implements RecetaService {
     @Override
     @Transactional
     public RecetaDTO generarYGuardar(String descripcion) throws Exception {
-        List<Receta> cache = recetaRepository.buscarEnCache("%" + descripcion.toLowerCase() + "%");
+        String descripcionParaCache = limpiarSufijoDificultad(descripcion);
+        List<Receta> cache = recetaRepository.buscarEnCache("%" + descripcionParaCache.toLowerCase() + "%");
         if (!cache.isEmpty()) {
             return recetaToDTO(cache.get(0));
         }
@@ -76,6 +155,11 @@ public class RecetaGeneradorService implements RecetaService {
         Map<String, Object> recetaMap = iaService.generarReceta(descripcion);
         Receta receta = construirYPersistirReceta(recetaMap);
         return recetaToDTO(receta);
+    }
+
+    private String limpiarSufijoDificultad(String descripcion) {
+        if (descripcion == null) return "";
+        return descripcion.replaceAll("\\s*\\(dificultad:[^)]+\\)", "").trim();
     }
 
     @Override
@@ -98,6 +182,65 @@ public class RecetaGeneradorService implements RecetaService {
 
         Receta receta = construirYPersistirReceta(recetaMap);
         return recetaToDTO(receta);
+    }
+
+    @Override
+    @Transactional
+    public RecetaDTO generarYGuardarConAversiones(String descripcion, List<Long> intoleranciaIds) throws Exception {
+        if (intoleranciaIds == null || intoleranciaIds.isEmpty()) {
+            return generarYGuardar(descripcion);
+        }
+        if (intoleranciaIds.size() == 1) {
+            return generarYGuardarConAversion(descripcion, intoleranciaIds.get(0));
+        }
+
+        List<IAService.AversionPromptInfo> aversiones = resolverAversiones(intoleranciaIds);
+        Map<String, Object> recetaMap = iaService.generarRecetaConAversiones(descripcion, aversiones);
+        Receta receta = construirYPersistirReceta(recetaMap);
+        return recetaToDTO(receta);
+    }
+
+    @Override
+    @Transactional
+    public RecetaDTO generarYGuardarConDespensaYAversiones(Long usuarioId, List<Long> intoleranciaIds, String descripcion) throws Exception {
+        List<ProductoDespensa> productos = productoDespensaRepository.findByUsuarioIdAndConsumidoFalse(usuarioId);
+        List<String> ingredientesDespensa = new ArrayList<>();
+        for (ProductoDespensa p : productos) {
+            if (p.getAlimento() != null) {
+                ingredientesDespensa.add(p.getAlimento().getNombre());
+            }
+        }
+
+        if (intoleranciaIds == null || intoleranciaIds.isEmpty()) {
+            Map<String, Object> recetaMap = iaService.generarRecetaConDespensa(descripcion, ingredientesDespensa);
+            return recetaToDTO(construirYPersistirReceta(recetaMap));
+        }
+        if (intoleranciaIds.size() == 1) {
+            return generarYGuardarConDespensa(usuarioId, intoleranciaIds.get(0), descripcion);
+        }
+
+        List<IAService.AversionPromptInfo> aversiones = resolverAversiones(intoleranciaIds);
+        Map<String, Object> recetaMap = iaService.generarRecetaConDespensaYAversiones(descripcion, ingredientesDespensa, aversiones);
+        Receta receta = construirYPersistirReceta(recetaMap);
+        return recetaToDTO(receta);
+    }
+
+    private List<IAService.AversionPromptInfo> resolverAversiones(List<Long> intoleranciaIds) throws Exception {
+        List<IAService.AversionPromptInfo> aversiones = new ArrayList<>();
+        for (Long id : intoleranciaIds) {
+            IntoleranciaUsuario intolerancia = intoleranciaRepository.findById(id)
+                    .orElseThrow(() -> new Exception("Intolerancia no encontrada: " + id));
+            List<Map<String, Object>> motivos = new ArrayList<>();
+            for (MotivoRechazo m : intolerancia.getMotivos()) {
+                motivos.add(Map.of("tipo", m.getTipo().name(), "intensidad", m.getIntensidad()));
+            }
+            aversiones.add(new IAService.AversionPromptInfo(
+                    intolerancia.getAlimento().getNombre(),
+                    intolerancia.getNivelRechazo(),
+                    motivos
+            ));
+        }
+        return aversiones;
     }
 
     @Override
@@ -169,12 +312,40 @@ public class RecetaGeneradorService implements RecetaService {
                 ra.setMetodoPreparacion(parseMetodo((String) ingMap.get("metodoPreparacion")));
                 ra.setOculto(false);
                 ra.setCantidadMinima(toBigDecimal(ingMap.get("cantidad")).multiply(new BigDecimal("0.3")));
+                ra.setDescripcionNutricional((String) ingMap.get("descripcionEdamam"));
 
                 receta.getIngredientes().add(ra);
             }
         }
 
+        receta.setImagenUrl(resolverImagen(receta));
+        calcularYAplicarNutricion(receta);
+
         return recetaRepository.save(receta);
+    }
+
+    public void calcularYAplicarNutricion(Receta receta) {
+        if (receta.getIngredientes() == null || receta.getIngredientes().isEmpty()) return;
+
+        List<String> texto = new ArrayList<>();
+        for (RecetaAlimento ra : receta.getIngredientes()) {
+            if (ra.getAlimento() == null) continue;
+            if (ra.getDescripcionNutricional() != null && !ra.getDescripcionNutricional().isBlank()) {
+                texto.add(ra.getDescripcionNutricional());
+            } else {
+                String unidad = ra.getUnidadMedida() != null ? ra.getUnidadMedida() : "g";
+                String cantidad = ra.getCantidad() != null ? ra.getCantidad().stripTrailingZeros().toPlainString() : "1";
+                texto.add(edamamNutricionService.construirDescripcionFallback(
+                        ra.getAlimento().getNombre(), cantidad, unidad));
+            }
+        }
+
+        edamamNutricionService.analizar(receta.getTitulo(), texto).ifPresent(nut -> {
+            receta.setCaloriasTotal(nut.calorias());
+            receta.setProteinasTotal(nut.proteinas());
+            receta.setHidratosTotal(nut.hidratos());
+            receta.setGrasasTotal(nut.grasas());
+        });
     }
 
     private RecetaDTO recetaToDTO(Receta r) {
@@ -188,6 +359,10 @@ public class RecetaGeneradorService implements RecetaService {
         dto.setDificultad(r.getDificultad() != null ? r.getDificultad().name() : null);
         dto.setImagenUrl(r.getImagenUrl());
         dto.setGeneradaPorIa(r.isGeneradaPorIa());
+        dto.setCaloriasTotal(r.getCaloriasTotal());
+        dto.setProteinasTotal(r.getProteinasTotal());
+        dto.setHidratosTotal(r.getHidratosTotal());
+        dto.setGrasasTotal(r.getGrasasTotal());
         dto.setCreatedAt(r.getCreatedAt());
 
         List<IngredienteDTO> ingredientesDTO = new ArrayList<>();

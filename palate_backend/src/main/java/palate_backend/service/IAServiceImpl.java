@@ -9,6 +9,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.util.Map;
 import java.util.List;
 
@@ -19,7 +20,10 @@ public class IAServiceImpl implements IAService {
     private String apiKey;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
-    private final HttpClient httpClient = HttpClient.newHttpClient();
+
+    private final HttpClient httpClient = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(10))
+            .build();
 
     @Override
     public Map<String, Object> generarReceta(String descripcion) throws Exception {
@@ -216,6 +220,120 @@ public class IAServiceImpl implements IAService {
         return llamarGemini(prompt);
     }
 
+    @Override
+    public Map<String, Object> generarRecetaConAversiones(String descripcion, List<AversionPromptInfo> aversiones) throws Exception {
+        if (aversiones == null || aversiones.isEmpty()) {
+            return generarReceta(descripcion);
+        }
+        if (aversiones.size() == 1) {
+            AversionPromptInfo unica = aversiones.get(0);
+            return generarRecetaConAversion(descripcion, unica.alimentoRechazado(), unica.nivelRechazo(), unica.motivos());
+        }
+
+        String bloqueAversiones = construirBloqueAversiones(aversiones);
+        String prompt = """
+                Eres un chef profesional especializado en ayudar a personas con varias aversiones alimentarias simultaneamente.
+
+                %s
+
+                El usuario quiere: "%s"
+
+                Genera una receta que INCLUYA TODOS los ingredientes rechazados listados, respetando para cada uno las reglas de nivel y de motivo indicadas. La receta debe ayudar al usuario a acostumbrarse progresivamente a esos ingredientes.
+
+                %s
+                """.formatted(bloqueAversiones, descripcion, getJsonRules());
+
+        return llamarGemini(prompt);
+    }
+
+    @Override
+    public Map<String, Object> generarRecetaConDespensaYAversiones(String descripcion, List<String> ingredientesDespensa, List<AversionPromptInfo> aversiones) throws Exception {
+        if (aversiones == null || aversiones.isEmpty()) {
+            return generarRecetaConDespensa(descripcion, ingredientesDespensa);
+        }
+        if (aversiones.size() == 1) {
+            AversionPromptInfo unica = aversiones.get(0);
+            return generarRecetaConDespensaYAversion(descripcion, ingredientesDespensa, unica.alimentoRechazado(), unica.nivelRechazo(), unica.motivos());
+        }
+
+        StringBuilder listaIngredientes = new StringBuilder();
+        for (String ingrediente : ingredientesDespensa) {
+            listaIngredientes.append("- ").append(ingrediente).append("\n");
+        }
+
+        String bloqueAversiones = construirBloqueAversiones(aversiones);
+        String prompt = """
+                Eres un chef profesional especializado en ayudar a personas con varias aversiones alimentarias simultaneamente.
+
+                %s
+
+                El usuario quiere: "%s"
+
+                El usuario tiene ademas los siguientes ingredientes disponibles en casa (prioriza usarlos):
+                %s
+
+                Genera una receta que INCLUYA TODOS los ingredientes rechazados listados, respetando para cada uno las reglas de nivel y motivo indicadas, y que aproveche los ingredientes de la despensa.
+
+                %s
+                """.formatted(bloqueAversiones, descripcion, listaIngredientes, getJsonRules());
+
+        return llamarGemini(prompt);
+    }
+
+    private String construirBloqueAversiones(List<AversionPromptInfo> aversiones) {
+        StringBuilder bloque = new StringBuilder();
+        bloque.append("El usuario tiene las siguientes aversiones alimentarias:\n\n");
+
+        int indice = 1;
+        for (AversionPromptInfo aversion : aversiones) {
+            bloque.append("AVERSION ").append(indice).append(": ")
+                    .append(aversion.alimentoRechazado())
+                    .append(" (nivel ").append(aversion.nivelRechazo()).append("/10)\n");
+            bloque.append("Motivos:\n");
+            for (Map<String, Object> motivo : aversion.motivos()) {
+                bloque.append("- ").append(motivo.get("tipo"))
+                        .append(" (intensidad ").append(motivo.get("intensidad")).append("/5)\n");
+            }
+            bloque.append("Regla de nivel: ").append(describirReglaNivel(aversion.nivelRechazo())).append("\n");
+            bloque.append("Reglas segun motivo:\n").append(describirReglasMotivo(aversion.motivos()));
+            bloque.append("\n");
+            indice++;
+        }
+        return bloque.toString();
+    }
+
+    private String describirReglaNivel(int nivelRechazo) {
+        if (nivelRechazo <= 3) {
+            return "BAJO (1-3): cantidades minimas, rol COMPLEMENTO o SECUNDARIO, metodo que camufle el ingrediente, no visible en el plato.";
+        }
+        if (nivelRechazo <= 6) {
+            return "MEDIO (4-6): cantidades reducidas (50-70%), rol SECUNDARIO como maximo, metodo que suavice el ingrediente.";
+        }
+        return "ALTO (7-10): cantidades normales (80-100%), rol PROTAGONISTA o SECUNDARIO, cualquier metodo aceptable.";
+    }
+
+    private String describirReglasMotivo(List<Map<String, Object>> motivos) {
+        StringBuilder reglas = new StringBuilder();
+        for (Map<String, Object> motivo : motivos) {
+            String tipo = motivo.get("tipo").toString();
+            switch (tipo) {
+                case "TEXTURA":
+                    reglas.append("- TEXTURA: usar TRITURADO, EN_SALSA o FRITO. EVITAR: CRUDO, AL_VAPOR, HERVIDO.\n");
+                    break;
+                case "SABOR":
+                    reglas.append("- SABOR: combinar con sabores fuertes. Usar EN_SALSA, MARINADO u HORNEADO. EVITAR: CRUDO, HERVIDO.\n");
+                    break;
+                case "OLOR":
+                    reglas.append("- OLOR: coccion prolongada. Usar HORNEADO, FRITO o MARINADO. EVITAR: CRUDO, AL_VAPOR.\n");
+                    break;
+                case "COLOR":
+                    reglas.append("- COLOR: ocultar visualmente. Usar TRITURADO, EN_SALSA u HORNEADO. EVITAR: CRUDO.\n");
+                    break;
+            }
+        }
+        return reglas.toString();
+    }
+
     private String getJsonRules() {
         return """
                 Responde SOLO con un JSON válido, sin texto adicional, sin markdown, sin ```json```.
@@ -230,10 +348,11 @@ public class IAServiceImpl implements IAService {
                     "dificultad": "MEDIA",
                     "ingredientes": [
                         {
-                            "nombre": "Nombre del ingrediente",
+                            "nombre": "Cebolla",
                             "categoria": "Verduras",
-                            "cantidad": 200,
-                            "unidadMedida": "g",
+                            "cantidad": 0.5,
+                            "unidadMedida": "ud",
+                            "descripcionEdamam": "1/2 medium onion",
                             "rol": "PROTAGONISTA",
                             "metodoPreparacion": "HORNEADO"
                         }
@@ -246,7 +365,22 @@ public class IAServiceImpl implements IAService {
                 - rol: PROTAGONISTA, SECUNDARIO o COMPLEMENTO
                 - metodoPreparacion: CRUDO, TRITURADO, EN_SALSA, HORNEADO, FRITO, HERVIDO, AL_VAPOR o MARINADO
                 - categoria: Verduras, Frutas, Carnes, Pescados, Lácteos, Cereales, Legumbres, Condimentos, Tubérculos, Proteínas u Otros
-                - cantidad es un número decimal
+                - cantidad es un número decimal (puede ser fraccion: 0.5, 0.25, 0.33)
+                - unidadMedida: usar medidas caseras siempre que sea natural:
+                    * Alimentos contables (huevos, cebollas, manzanas, patatas): "ud"
+                    * Ajos: "diente"
+                    * Condimentos secos, harinas, azucar: "cucharada" o "cucharadita"
+                    * Liquidos pequenos (aceite, vinagre, salsas): "cucharada" o "ml"
+                    * Carnes, pescados, verduras a granel: "g"
+                    * Liquidos grandes (leche, caldo, agua): "ml"
+                - descripcionEdamam: OBLIGATORIO. Texto en INGLES con la cantidad y nombre del ingrediente
+                  en peso CRUDO para que la API Edamam calcule nutricion correctamente. Ejemplos:
+                    * "1/2 medium onion"
+                    * "1 tablespoon olive oil"
+                    * "200g raw chicken breast"
+                    * "1 clove garlic"
+                    * "250ml whole milk"
+                - Las cantidades de ingredientes son siempre en PESO CRUDO antes de cocinar
                 - Incluye entre 3 y 8 ingredientes
                 - Las instrucciones deben ser pasos numerados claros
                 """;
@@ -261,16 +395,17 @@ public class IAServiceImpl implements IAService {
                 },
                 "generationConfig", Map.of(
                         "temperature", 0.7,
-                        "maxOutputTokens", 1500,
+                        "maxOutputTokens", 4096,
                         "responseMimeType", "application/json"
                 )
         ));
 
-        String url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=" + apiKey;
+        String url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" + apiKey;
 
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(url))
                 .header("Content-Type", "application/json")
+                .timeout(Duration.ofSeconds(45))
                 .POST(HttpRequest.BodyPublishers.ofString(requestBody))
                 .build();
 

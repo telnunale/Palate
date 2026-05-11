@@ -47,12 +47,12 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public ResponseEntity<Map<String, String>> login(@RequestBody Map<String, String> datos) {
+    public ResponseEntity<Map<String, Object>> login(@RequestBody Map<String, String> datos) {
         String email = datos.get("email");
         String password = datos.get("password");
 
         if (email == null || password == null) {
-            Map<String, String> error = new HashMap<>();
+            Map<String, Object> error = new HashMap<>();
             error.put("error", "Faltan campos obligatorios");
             return ResponseEntity.badRequest().body(error);
         }
@@ -60,13 +60,14 @@ public class AuthController {
         Optional<UsuarioDTO> resultado = usuarioService.login(email, password);
 
         if (resultado.isEmpty()) {
-            Map<String, String> error = new HashMap<>();
+            Map<String, Object> error = new HashMap<>();
             error.put("error", "Email o contraseña incorrectos");
             return ResponseEntity.status(401).body(error);
         }
 
         UsuarioDTO usuario = resultado.get();
-        Map<String, String> respuesta = new HashMap<>();
+        Map<String, Object> respuesta = new HashMap<>();
+        respuesta.put("id", usuario.getId());
         respuesta.put("mensaje", "Login correcto");
         respuesta.put("email", usuario.getEmail());
         respuesta.put("nombre", usuario.getNombre());

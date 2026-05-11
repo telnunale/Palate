@@ -1,32 +1,19 @@
-/// Modelo que representa una receta de cocina.
-/// Mapea la estructura del DTO devuelto por el endpoint GET /recetas.
 class Receta {
-  /// Identificador único de la receta
   final int id;
-
-  /// Nombre o título de la receta
   final String titulo;
-
-  /// Descripción breve del plato
   final String descripcion;
-
-  /// Pasos de elaboración detallados
   final String instrucciones;
-
-  /// Tiempo de preparación en minutos
   final int tiempoPreparacion;
-
-  /// Tiempo de cocción en minutos
   final int tiempoCoccion;
-
-  /// Nivel de dificultad: FACIL, MEDIA o DIFICIL
   final String dificultad;
-
-  /// URL de la imagen representativa (puede ser nula)
   final String? imagenUrl;
-
-  /// Indica si la receta fue generada automáticamente por la IA
   final bool generadaPorIa;
+  final List<int> idsAlimentos;
+  final Map<int, List<String>> metodosPorAlimento;
+  final double? caloriasTotal;
+  final double? proteinasTotal;
+  final double? hidratosTotal;
+  final double? grasasTotal;
 
   Receta({
     required this.id,
@@ -38,13 +25,35 @@ class Receta {
     required this.dificultad,
     this.imagenUrl,
     this.generadaPorIa = false,
+    this.idsAlimentos = const [],
+    this.metodosPorAlimento = const {},
+    this.caloriasTotal,
+    this.proteinasTotal,
+    this.hidratosTotal,
+    this.grasasTotal,
   });
 
-  /// Suma del tiempo de preparación y cocción
   int get tiempoTotal => tiempoPreparacion + tiempoCoccion;
 
-  /// Crea una instancia de [Receta] a partir de un mapa JSON.
   factory Receta.fromJson(Map<String, dynamic> json) {
+    final ingredientesJson = json['ingredientes'] as List<dynamic>?;
+    final ids = <int>[];
+    final metodos = <int, List<String>>{};
+    if (ingredientesJson != null) {
+      for (final ing in ingredientesJson) {
+        final ingMap = ing as Map<String, dynamic>;
+        final alimento = ingMap['alimento'] as Map<String, dynamic>?;
+        final id = alimento?['id'] as int?;
+        if (id != null && id > 0) {
+          ids.add(id);
+          final metodo = ingMap['metodoPreparacion'] as String?;
+          if (metodo != null) {
+            metodos.putIfAbsent(id, () => []).add(metodo);
+          }
+        }
+      }
+    }
+
     return Receta(
       id: json['id'] ?? 0,
       titulo: json['titulo'] ?? '',
@@ -55,6 +64,12 @@ class Receta {
       dificultad: json['dificultad'] ?? 'MEDIA',
       imagenUrl: json['imagenUrl'],
       generadaPorIa: json['generadaPorIa'] ?? false,
+      idsAlimentos: ids,
+      metodosPorAlimento: metodos,
+      caloriasTotal: (json['caloriasTotal'] as num?)?.toDouble(),
+      proteinasTotal: (json['proteinasTotal'] as num?)?.toDouble(),
+      hidratosTotal: (json['hidratosTotal'] as num?)?.toDouble(),
+      grasasTotal: (json['grasasTotal'] as num?)?.toDouble(),
     );
   }
 }

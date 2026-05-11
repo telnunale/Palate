@@ -14,6 +14,10 @@ public class RecetaDTO {
     private String dificultad;
     private String imagenUrl;
     private boolean generadaPorIa;
+    private Double caloriasTotal;
+    private Double proteinasTotal;
+    private Double hidratosTotal;
+    private Double grasasTotal;
     private LocalDateTime createdAt;
     private List<IngredienteDTO> ingredientes;
 
@@ -45,6 +49,18 @@ public class RecetaDTO {
 
     public boolean isGeneradaPorIa() { return generadaPorIa; }
     public void setGeneradaPorIa(boolean generadaPorIa) { this.generadaPorIa = generadaPorIa; }
+
+    public Double getCaloriasTotal() { return caloriasTotal; }
+    public void setCaloriasTotal(Double caloriasTotal) { this.caloriasTotal = caloriasTotal; }
+
+    public Double getProteinasTotal() { return proteinasTotal; }
+    public void setProteinasTotal(Double proteinasTotal) { this.proteinasTotal = proteinasTotal; }
+
+    public Double getHidratosTotal() { return hidratosTotal; }
+    public void setHidratosTotal(Double hidratosTotal) { this.hidratosTotal = hidratosTotal; }
+
+    public Double getGrasasTotal() { return grasasTotal; }
+    public void setGrasasTotal(Double grasasTotal) { this.grasasTotal = grasasTotal; }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }

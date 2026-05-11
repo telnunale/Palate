@@ -4,9 +4,6 @@ import '../viewmodels/login_viewmodel.dart';
 import '../navigation/main_navigation.dart';
 import 'registro_view.dart';
 
-/// Pantalla de inicio de sesión.
-/// Muestra una imagen hero con el tagline de la aplicación en la parte superior
-/// y el formulario de credenciales deslizando desde la parte inferior.
 class LoginView extends StatefulWidget {
   const LoginView({super.key});
 
@@ -19,7 +16,6 @@ class _LoginViewState extends State<LoginView> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
 
-  /// Controla si la contraseña se muestra en texto plano o como puntos
   bool _ocultarPassword = true;
 
   @override
@@ -29,15 +25,17 @@ class _LoginViewState extends State<LoginView> {
     super.dispose();
   }
 
-  /// Ejecuta el proceso de autenticación y navega a la pantalla principal
-  /// si las credenciales son correctas.
   void _login() async {
     _viewModel.email = _emailController.text.trim();
     _viewModel.password = _passwordController.text;
 
     final usuario = await _viewModel.login();
 
-    if (usuario != null && mounted) {
+    // Si el widget se ha desechado durante la peticion no hay nada que
+    // actualizar; salimos sin tocar el arbol de widgets.
+    if (!mounted) return;
+
+    if (usuario != null) {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
@@ -56,10 +54,8 @@ class _LoginViewState extends State<LoginView> {
       body: SingleChildScrollView(
         child: Column(
           children: [
-            // ── Sección hero con imagen de fondo ──
             _HeroSection(),
 
-            // ── Tarjeta del formulario, solapada sobre la imagen ──
             Transform.translate(
               offset: const Offset(0, -32),
               child: Container(
@@ -95,7 +91,6 @@ class _LoginViewState extends State<LoginView> {
                     ),
                     const SizedBox(height: 32),
 
-                    // ── Campo de email ──
                     Text(
                       'CORREO ELECTRÓNICO',
                       style: GoogleFonts.inter(
@@ -133,7 +128,6 @@ class _LoginViewState extends State<LoginView> {
                     ),
                     const SizedBox(height: 20),
 
-                    // ── Campo de contraseña ──
                     Text(
                       'CONTRASEÑA',
                       style: GoogleFonts.inter(
@@ -183,7 +177,6 @@ class _LoginViewState extends State<LoginView> {
                       ),
                     ),
 
-                    // ── Mensaje de error si las credenciales son incorrectas ──
                     if (_viewModel.error != null) ...[
                       const SizedBox(height: 16),
                       Container(
@@ -216,7 +209,6 @@ class _LoginViewState extends State<LoginView> {
 
                     const SizedBox(height: 28),
 
-                    // ── Botón de inicio de sesión con gradiente ──
                     SizedBox(
                       height: 54,
                       child: DecoratedBox(
@@ -273,7 +265,6 @@ class _LoginViewState extends State<LoginView> {
 
                     const SizedBox(height: 24),
 
-                    // ── Enlace hacia la pantalla de registro ──
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -315,7 +306,6 @@ class _LoginViewState extends State<LoginView> {
   }
 }
 
-/// Sección superior con imagen de fondo, overlay oscuro, logo y tagline.
 class _HeroSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {

@@ -33,7 +33,9 @@ public class DespensaController {
     public ResponseEntity<Object> añadir(@RequestBody Map<String, Object> datos) {
         Long usuarioId = Long.valueOf(datos.get("usuarioId").toString());
         Long alimentoId = Long.valueOf(datos.get("alimentoId").toString());
-        LocalDate fechaCaducidad = LocalDate.parse(datos.get("fechaCaducidad").toString());
+        LocalDate fechaCaducidad = datos.get("fechaCaducidad") != null
+                ? LocalDate.parse(datos.get("fechaCaducidad").toString())
+                : null;
         BigDecimal cantidad = new BigDecimal(datos.get("cantidad").toString());
         String unidad = (String) datos.get("unidad");
 

@@ -2,34 +2,26 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/usuario.dart';
 import '../models/receta.dart';
+import '../models/receta_recomendada.dart';
 
-/// Servicio centralizado para la comunicación con el servidor backend.
-/// Gestiona todas las peticiones HTTP a la API REST de Palate.
-/// La URL base apunta al servidor Spring Boot ejecutándose localmente.
 class ApiService {
-  static const String baseUrl = 'http://localhost:8080/api';
+  static const String baseUrl = 'http://192.168.0.16:8080/api';
 
-  // ==================== AUTENTICACIÓN ====================
-
-  /// Autentica al usuario con email y contraseña.
-  /// Lanza una [Exception] si las credenciales son incorrectas.
   Future<Usuario> login(String email, String password) async {
     final respuesta = await http.post(
       Uri.parse('$baseUrl/auth/login'),
       headers: {'Content-Type': 'application/json'},
       body: json.encode({'email': email, 'password': password}),
-    );
+    ).timeout(const Duration(seconds: 30));
 
     if (respuesta.statusCode == 200) {
       return Usuario.fromJson(json.decode(respuesta.body));
     } else {
       final error = json.decode(respuesta.body);
-      throw Exception(error['error'] ?? 'Error al iniciar sesión');
+      throw Exception(error['error'] ?? 'Error al iniciar sesion');
     }
   }
 
-  /// Registra un nuevo usuario en el sistema.
-  /// Devuelve el mensaje de confirmación del servidor.
   Future<String> registro(String nombre, String email, String password) async {
     final respuesta = await http.post(
       Uri.parse('$baseUrl/auth/registro'),
@@ -39,7 +31,7 @@ class ApiService {
         'email': email,
         'password': password,
       }),
-    );
+    ).timeout(const Duration(seconds: 30));
 
     if (respuesta.statusCode == 200) {
       final datos = json.decode(respuesta.body);
@@ -50,11 +42,8 @@ class ApiService {
     }
   }
 
-  // ==================== RECETAS ====================
-
-  /// Obtiene el listado completo de recetas disponibles.
   Future<List<Receta>> obtenerRecetas() async {
-    final respuesta = await http.get(Uri.parse('$baseUrl/recetas'));
+    final respuesta = await http.get(Uri.parse('$baseUrl/recetas')).timeout(const Duration(seconds: 30));
 
     if (respuesta.statusCode == 200) {
       final List<dynamic> lista = json.decode(respuesta.body);
@@ -64,10 +53,8 @@ class ApiService {
     }
   }
 
-  /// Obtiene el detalle completo de una receta, incluyendo sus ingredientes.
-  /// Devuelve el mapa JSON sin parsear para acceder a todos los campos del DTO.
   Future<Map<String, dynamic>> obtenerRecetaPorId(int id) async {
-    final respuesta = await http.get(Uri.parse('$baseUrl/recetas/$id'));
+    final respuesta = await http.get(Uri.parse('$baseUrl/recetas/$id')).timeout(const Duration(seconds: 30));
 
     if (respuesta.statusCode == 200) {
       return json.decode(respuesta.body);
@@ -76,14 +63,12 @@ class ApiService {
     }
   }
 
-  /// Genera una nueva receta usando inteligencia artificial a partir
-  /// de una descripción libre del usuario.
   Future<Receta> generarReceta(String descripcion) async {
     final respuesta = await http.post(
       Uri.parse('$baseUrl/recetas/generar'),
       headers: {'Content-Type': 'application/json'},
       body: json.encode({'descripcion': descripcion}),
-    );
+    ).timeout(const Duration(seconds: 60));
 
     if (respuesta.statusCode == 200) {
       return Receta.fromJson(json.decode(respuesta.body));
@@ -92,35 +77,30 @@ class ApiService {
     }
   }
 
-  /// Genera una receta adaptada para superar una aversión alimentaria concreta.
-  /// El parámetro [intoleranciaId] identifica el alimento rechazado y sus motivos,
-  /// que la IA usa para decidir cómo incorporarlo de forma progresiva.
   Future<Receta> generarRecetaConAversion(
     String descripcion,
-    int intoleranciaId,
+    List<int> intoleranciaIds,
   ) async {
     final respuesta = await http.post(
       Uri.parse('$baseUrl/recetas/generar-con-aversion'),
       headers: {'Content-Type': 'application/json'},
       body: json.encode({
         'descripcion': descripcion,
-        'intoleranciaId': intoleranciaId,
+        'intoleranciaIds': intoleranciaIds,
       }),
-    );
+    ).timeout(const Duration(seconds: 60));
 
     if (respuesta.statusCode == 200) {
       return Receta.fromJson(json.decode(respuesta.body));
     } else {
-      throw Exception('Error al generar la receta con aversión');
+      throw Exception('Error al generar la receta con aversion');
     }
   }
 
-  /// Genera una receta priorizando los ingredientes disponibles en la despensa.
-  /// Opcionalmente acepta una aversión para aplicar ambas restricciones a la vez.
   Future<Receta> generarRecetaConDespensa({
     required int usuarioId,
     String? descripcion,
-    int? intoleranciaId,
+    List<int> intoleranciaIds = const [],
   }) async {
     final respuesta = await http.post(
       Uri.parse('$baseUrl/recetas/generar-con-despensa'),
@@ -128,9 +108,9 @@ class ApiService {
       body: json.encode({
         'usuarioId': usuarioId,
         if (descripcion != null) 'descripcion': descripcion,
-        if (intoleranciaId != null) 'intoleranciaId': intoleranciaId,
+        if (intoleranciaIds.isNotEmpty) 'intoleranciaIds': intoleranciaIds,
       }),
-    );
+    ).timeout(const Duration(seconds: 60));
 
     if (respuesta.statusCode == 200) {
       return Receta.fromJson(json.decode(respuesta.body));
@@ -139,13 +119,25 @@ class ApiService {
     }
   }
 
-  // ==================== DESPENSA ====================
+  Future<List<RecetaRecomendada>> obtenerRecomendaciones(int usuarioId) async {
+    final respuesta = await http.get(
+      Uri.parse('$baseUrl/recomendaciones/$usuarioId'),
+    ).timeout(const Duration(seconds: 30));
 
-  /// Obtiene los productos activos (no consumidos) de la despensa del usuario.
+    if (respuesta.statusCode == 200) {
+      final List<dynamic> lista = json.decode(respuesta.body);
+      return lista
+          .map((json) => RecetaRecomendada.fromJson(json as Map<String, dynamic>))
+          .toList();
+    } else {
+      throw Exception('Error al cargar las recomendaciones');
+    }
+  }
+
   Future<List<Map<String, dynamic>>> obtenerDespensa(int usuarioId) async {
     final respuesta = await http.get(
       Uri.parse('$baseUrl/despensa/$usuarioId'),
-    );
+    ).timeout(const Duration(seconds: 30));
 
     if (respuesta.statusCode == 200) {
       final List<dynamic> lista = json.decode(respuesta.body);
@@ -155,24 +147,22 @@ class ApiService {
     }
   }
 
-  /// Obtiene los productos que caducan en los próximos [dias] días.
   Future<List<Map<String, dynamic>>> obtenerProximosACaducar(
     int usuarioId,
     int dias,
   ) async {
     final respuesta = await http.get(
       Uri.parse('$baseUrl/despensa/$usuarioId/proximos/$dias'),
-    );
+    ).timeout(const Duration(seconds: 30));
 
     if (respuesta.statusCode == 200) {
       final List<dynamic> lista = json.decode(respuesta.body);
       return lista.cast<Map<String, dynamic>>();
     } else {
-      throw Exception('Error al obtener productos próximos a caducar');
+      throw Exception('Error al obtener productos proximos a caducar');
     }
   }
 
-  /// Añade un nuevo producto a la despensa del usuario.
   Future<Map<String, dynamic>> agregarProducto({
     required int usuarioId,
     required int alimentoId,
@@ -190,17 +180,15 @@ class ApiService {
         'unidad': unidad,
         if (fechaCaducidad != null) 'fechaCaducidad': fechaCaducidad,
       }),
-    );
+    ).timeout(const Duration(seconds: 30));
 
     if (respuesta.statusCode == 200) {
       return json.decode(respuesta.body);
     } else {
-      throw Exception('Error al añadir el producto');
+      throw Exception('Error al agregar el producto');
     }
   }
 
-  /// Actualiza los datos de un producto de la despensa.
-  /// [datos] puede contener cualquier combinación de campos a modificar.
   Future<Map<String, dynamic>> actualizarProducto(
     int id,
     Map<String, dynamic> datos,
@@ -209,7 +197,7 @@ class ApiService {
       Uri.parse('$baseUrl/despensa/$id'),
       headers: {'Content-Type': 'application/json'},
       body: json.encode(datos),
-    );
+    ).timeout(const Duration(seconds: 30));
 
     if (respuesta.statusCode == 200) {
       return json.decode(respuesta.body);
@@ -218,24 +206,20 @@ class ApiService {
     }
   }
 
-  /// Elimina un producto de la despensa de forma permanente.
   Future<void> eliminarProducto(int id) async {
     final respuesta = await http.delete(
       Uri.parse('$baseUrl/despensa/$id'),
-    );
+    ).timeout(const Duration(seconds: 30));
 
     if (respuesta.statusCode != 200) {
       throw Exception('Error al eliminar el producto');
     }
   }
 
-  // ==================== AVERSIONES ====================
-
-  /// Obtiene la lista de aversiones alimentarias registradas por el usuario.
   Future<List<Map<String, dynamic>>> obtenerAversiones(int usuarioId) async {
     final respuesta = await http.get(
       Uri.parse('$baseUrl/intolerancias/$usuarioId'),
-    );
+    ).timeout(const Duration(seconds: 30));
 
     if (respuesta.statusCode == 200) {
       final List<dynamic> lista = json.decode(respuesta.body);
@@ -245,8 +229,6 @@ class ApiService {
     }
   }
 
-  /// Registra una nueva aversión alimentaria para el usuario.
-  /// [motivos] es una lista de mapas con 'tipo' e 'intensidad' de cada rechazo sensorial.
   Future<void> crearAversion({
     required int usuarioId,
     required int alimentoId,
@@ -262,21 +244,122 @@ class ApiService {
         'nivelRechazo': nivelRechazo,
         'motivos': motivos,
       }),
-    );
+    ).timeout(const Duration(seconds: 30));
 
     if (respuesta.statusCode != 200) {
-      throw Exception('Error al registrar la aversión');
+      try {
+        final cuerpo = json.decode(respuesta.body) as Map<String, dynamic>;
+        final mensaje = cuerpo['error'] as String?;
+        throw Exception(
+          mensaje ?? 'Error al registrar la aversion (${respuesta.statusCode})',
+        );
+      } catch (e) {
+        if (e is Exception) rethrow;
+        throw Exception(
+          'Error al registrar la aversion (${respuesta.statusCode})',
+        );
+      }
     }
   }
 
-  /// Elimina una aversión alimentaria del perfil del usuario.
   Future<void> eliminarAversion(int id) async {
     final respuesta = await http.delete(
       Uri.parse('$baseUrl/intolerancias/$id'),
-    );
+    ).timeout(const Duration(seconds: 30));
 
     if (respuesta.statusCode != 200) {
-      throw Exception('Error al eliminar la aversión');
+      throw Exception('Error al eliminar la aversion');
+    }
+  }
+
+  Future<void> actualizarAversion({
+    required int id,
+    required int nivelRechazo,
+    required List<Map<String, dynamic>> motivos,
+  }) async {
+    final respuesta = await http.put(
+      Uri.parse('$baseUrl/intolerancias/$id'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({
+        'nivelRechazo': nivelRechazo,
+        'motivos': motivos,
+      }),
+    ).timeout(const Duration(seconds: 30));
+
+    if (respuesta.statusCode != 200) {
+      try {
+        final cuerpo = json.decode(respuesta.body) as Map<String, dynamic>;
+        final mensaje = cuerpo['error'] as String?;
+        throw Exception(
+          mensaje ?? 'Error al actualizar la aversion (${respuesta.statusCode})',
+        );
+      } catch (e) {
+        if (e is Exception) rethrow;
+        throw Exception('Error al actualizar la aversion (${respuesta.statusCode})');
+      }
+    }
+  }
+
+  Future<Map<String, dynamic>> registrarFeedback({
+    required int intoleranciaId,
+    required bool tolerado,
+  }) async {
+    final respuesta = await http.post(
+      Uri.parse('$baseUrl/intolerancias/$intoleranciaId/feedback'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({
+        'intoleranciaId': intoleranciaId,
+        'tolerado': tolerado,
+      }),
+    ).timeout(const Duration(seconds: 30));
+
+    if (respuesta.statusCode == 200) {
+      return json.decode(respuesta.body) as Map<String, dynamic>;
+    } else {
+      throw Exception('Error al registrar el feedback');
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> obtenerCatalogoAlimentos(
+    int usuarioId,
+  ) async {
+    final respuesta = await http
+        .get(Uri.parse('$baseUrl/alimentos'))
+        .timeout(const Duration(seconds: 30));
+
+    if (respuesta.statusCode == 200) {
+      final List<dynamic> lista = json.decode(respuesta.body);
+      final ordenada = lista.cast<Map<String, dynamic>>().toList();
+      ordenada.sort((a, b) =>
+          ((a['nombre'] as String?) ?? '')
+              .toLowerCase()
+              .compareTo(((b['nombre'] as String?) ?? '').toLowerCase()));
+      return ordenada;
+    } else {
+      throw Exception('Error al cargar el catalogo de alimentos');
+    }
+  }
+
+  Future<Map<String, dynamic>> crearAlimento({
+    required String nombre,
+    String categoria = 'Otros',
+  }) async {
+    final respuesta = await http.post(
+      Uri.parse('$baseUrl/alimentos'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({'nombre': nombre, 'categoria': categoria}),
+    ).timeout(const Duration(seconds: 30));
+
+    if (respuesta.statusCode == 200) {
+      return json.decode(respuesta.body) as Map<String, dynamic>;
+    } else {
+      try {
+        final cuerpo = json.decode(respuesta.body) as Map<String, dynamic>;
+        throw Exception(cuerpo['error'] ?? 'Error al crear el alimento');
+      } catch (e) {
+        if (e is Exception) rethrow;
+        throw Exception('Error al crear el alimento (${respuesta.statusCode})');
+      }
     }
   }
 }

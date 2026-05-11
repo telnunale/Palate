@@ -40,6 +40,18 @@ public class Receta {
     @Column(name = "generada_por_ia", nullable = false)
     private boolean generadaPorIa = false;
 
+    @Column(name = "calorias_total")
+    private Double caloriasTotal;
+
+    @Column(name = "proteinas_total")
+    private Double proteinasTotal;
+
+    @Column(name = "hidratos_total")
+    private Double hidratosTotal;
+
+    @Column(name = "grasas_total")
+    private Double grasasTotal;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -134,6 +146,18 @@ public class Receta {
     public void setGeneradaPorIa(boolean generadaPorIa) {
         this.generadaPorIa = generadaPorIa;
     }
+
+    public Double getCaloriasTotal() { return caloriasTotal; }
+    public void setCaloriasTotal(Double caloriasTotal) { this.caloriasTotal = caloriasTotal; }
+
+    public Double getProteinasTotal() { return proteinasTotal; }
+    public void setProteinasTotal(Double proteinasTotal) { this.proteinasTotal = proteinasTotal; }
+
+    public Double getHidratosTotal() { return hidratosTotal; }
+    public void setHidratosTotal(Double hidratosTotal) { this.hidratosTotal = hidratosTotal; }
+
+    public Double getGrasasTotal() { return grasasTotal; }
+    public void setGrasasTotal(Double grasasTotal) { this.grasasTotal = grasasTotal; }
 
     public LocalDateTime getCreatedAt() {
         return createdAt;

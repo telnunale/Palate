@@ -2,44 +2,57 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/usuario.dart';
 import '../models/receta.dart';
+import '../models/receta_recomendada.dart';
 import '../viewmodels/home_viewmodel.dart';
+import '../utils/imagen_optim.dart';
+import 'generar_receta_view.dart';
 import 'receta_detalle.dart';
 
-/// Pantalla principal de la aplicación tras el inicio de sesión.
-/// Muestra un banner de acceso a la generación IA, estadísticas del usuario,
-/// alertas de productos próximos a caducar y las recetas más recientes.
 class HomeView extends StatefulWidget {
-  /// Usuario autenticado, necesario para mostrar el saludo personalizado
   final Usuario usuario;
 
   const HomeView({super.key, required this.usuario});
 
   @override
-  State<HomeView> createState() => _HomeViewState();
+  State<HomeView> createState() => HomeViewState();
 }
 
-class _HomeViewState extends State<HomeView> {
+class HomeViewState extends State<HomeView> {
   final _viewModel = HomeViewModel();
 
   @override
   void initState() {
     super.initState();
-    // Carga los datos al inicializar la pantalla
-    _viewModel.cargarDatos().then((_) => setState(() {}));
+    // Carga los datos al inicializar la pantalla. Se pasa el id del usuario
+    // autenticado para que el ViewModel pueda obtener las recomendaciones
+    // personalizadas del motor en dos capas.
+    _viewModel
+        .cargarDatos(widget.usuario.id)
+        .then((_) {
+          if (mounted) setState(() {});
+        });
   }
 
-  /// Devuelve una URL de imagen de Unsplash según el índice de la receta,
-  /// ya que las recetas generadas por IA no tienen imagen propia.
-  String _imagenReceta(int index) {
-    final imagenes = [
-      'https://images.unsplash.com/photo-1546549032-9571cd6b27df?w=400',
-      'https://images.unsplash.com/photo-1512058564366-18510be2db19?w=400',
-      'https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?w=400',
-      'https://images.unsplash.com/photo-1567620905732-2d1ec7ab7445?w=400',
-      'https://images.unsplash.com/photo-1598515214211-89d3c73ae83b?w=400',
-    ];
-    return imagenes[index % imagenes.length];
+  void recargar() {
+    _viewModel.cargarDatos(widget.usuario.id).then((_) {
+      if (mounted) setState(() {});
+    });
   }
+
+  String _imagenReceta(Receta receta, int index) {
+    if (receta.imagenUrl != null && receta.imagenUrl!.isNotEmpty) {
+      return receta.imagenUrl!;
+    }
+    return _fallbackImagenes[index % _fallbackImagenes.length];
+  }
+
+  static const List<String> _fallbackImagenes = [
+    'https://images.unsplash.com/photo-1546549032-9571cd6b27df?w=400',
+    'https://images.unsplash.com/photo-1512058564366-18510be2db19?w=400',
+    'https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?w=400',
+    'https://images.unsplash.com/photo-1567620905732-2d1ec7ab7445?w=400',
+    'https://images.unsplash.com/photo-1598515214211-89d3c73ae83b?w=400',
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -50,12 +63,53 @@ class _HomeViewState extends State<HomeView> {
             ? const Center(
                 child: CircularProgressIndicator(color: Color(0xFF732b16)),
               )
-            : CustomScrollView(
+            : _viewModel.error != null
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(32),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(
+                            Icons.wifi_off_outlined,
+                            size: 52,
+                            color: Color(0xFF88726d),
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'No se pudieron cargar los datos',
+                            textAlign: TextAlign.center,
+                            style: GoogleFonts.newsreader(
+                              fontSize: 22,
+                              color: const Color(0xFF732b16),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          TextButton(
+                            onPressed: () {
+                              // Reintentar la carga de datos al pulsar el botón
+                              _viewModel
+                                  .cargarDatos(widget.usuario.id)
+                                  .then((_) {
+                                    if (mounted) setState(() {});
+                                  });
+                            },
+                            child: Text(
+                              'Reintentar',
+                              style: GoogleFonts.inter(
+                                fontSize: 15,
+                                color: const Color(0xFF732b16),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                : CustomScrollView(
                 slivers: [
-                  // ── Barra superior con logo y notificaciones ──
                   SliverToBoxAdapter(child: _AppBar()),
 
-                  // ── Saludo personalizado ──
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
@@ -83,51 +137,59 @@ class _HomeViewState extends State<HomeView> {
                     ),
                   ),
 
-                  // ── Banner de generación con IA ──
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
-                      child: _BannerIA(),
+                      child: _BannerIA(
+                        onGenerarReceta: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) =>
+                                  GenerarRecetaView(usuario: widget.usuario),
+                            ),
+                          );
+                        },
+                      ),
                     ),
                   ),
 
-                  // ── Estadísticas rápidas en grid bento ──
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
                       child: _GridEstadisticas(
                         totalRecetas: _viewModel.totalRecetas,
+                        totalDespensa: _viewModel.totalDespensa,
+                        totalAversiones: _viewModel.totalAversiones,
                       ),
                     ),
                   ),
 
-                  // ── Recetas recientes ──
+                  // Esta seccion solo aparece cuando hay recetas en BD que el
+                  // motor de recomendacion ha podido puntuar para el perfil
+                  // del usuario. Si la lista esta vacia, se muestra una
+                  // tarjeta de invitacion a generar la primera receta.
+                  SliverToBoxAdapter(
+                    child: _SeccionRecomendadas(
+                      recomendadas: _viewModel.recetasRecomendadas,
+                      imagenReceta: _imagenReceta,
+                      usuario: widget.usuario,
+                    ),
+                  ),
+
+                  // El listado completo es accesible desde la pestana
+                  // "Recetas" de la navegacion inferior, por lo que aqui
+                  // se omite cualquier acceso directo redundante.
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'Recetas recientes',
-                            style: GoogleFonts.newsreader(
-                              fontSize: 20,
-                              fontWeight: FontWeight.w500,
-                              color: const Color(0xFF211a18),
-                            ),
-                          ),
-                          GestureDetector(
-                            onTap: () {},
-                            child: Text(
-                              'Ver todas',
-                              style: GoogleFonts.inter(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: const Color(0xFF732b16),
-                              ),
-                            ),
-                          ),
-                        ],
+                      child: Text(
+                        'Recetas recientes',
+                        style: GoogleFonts.newsreader(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w500,
+                          color: const Color(0xFF211a18),
+                        ),
                       ),
                     ),
                   ),
@@ -141,7 +203,7 @@ class _HomeViewState extends State<HomeView> {
                           padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
                           child: _TarjetaRecetaCompacta(
                             receta: receta,
-                            imagenUrl: _imagenReceta(index),
+                            imagenUrl: _imagenReceta(receta, index),
                             onTap: () {
                               Navigator.push(
                                 context,
@@ -149,7 +211,8 @@ class _HomeViewState extends State<HomeView> {
                                   builder: (_) => RecetaDetalleView(
                                     recetaId: receta.id,
                                     titulo: receta.titulo,
-                                    imagenUrl: _imagenReceta(index),
+                                    imagenUrl: _imagenReceta(receta, index),
+                                    usuario: widget.usuario,
                                   ),
                                 ),
                               );
@@ -166,11 +229,13 @@ class _HomeViewState extends State<HomeView> {
               ),
       ),
 
-      // ── Botón flotante de acceso rápido a la generación IA ──
       floatingActionButton: FloatingActionButton(
         onPressed: () {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Próximamente')),
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => GenerarRecetaView(usuario: widget.usuario),
+            ),
           );
         },
         backgroundColor: const Color(0xFF732b16),
@@ -180,7 +245,6 @@ class _HomeViewState extends State<HomeView> {
   }
 }
 
-/// Barra superior con el logotipo de la aplicación y el icono de notificaciones.
 class _AppBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
@@ -188,38 +252,20 @@ class _AppBar extends StatelessWidget {
       color: const Color(0xFFFFFBF7),
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
-            children: [
-              const Icon(
-                Icons.restaurant_menu,
-                color: Color(0xFF732b16),
-                size: 22,
-              ),
-              const SizedBox(width: 6),
-              Text(
-                'Palate',
-                style: GoogleFonts.newsreader(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w600,
-                  fontStyle: FontStyle.italic,
-                  color: const Color(0xFF732b16),
-                ),
-              ),
-            ],
+          const Icon(
+            Icons.restaurant_menu,
+            color: Color(0xFF732b16),
+            size: 22,
           ),
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: const Color(0xFFf4e5e2),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: const Icon(
-              Icons.notifications_outlined,
-              color: Color(0xFF732b16),
-              size: 20,
+          const SizedBox(width: 6),
+          Text(
+            'Palate',
+            style: GoogleFonts.newsreader(
+              fontSize: 22,
+              fontWeight: FontWeight.w600,
+              fontStyle: FontStyle.italic,
+              color: const Color(0xFF732b16),
             ),
           ),
         ],
@@ -228,9 +274,11 @@ class _AppBar extends StatelessWidget {
   }
 }
 
-/// Banner destacado que invita al usuario a generar recetas con IA.
-/// Muestra un fondo terracota con imagen superpuesta y un botón de acción.
 class _BannerIA extends StatelessWidget {
+  final VoidCallback onGenerarReceta;
+
+  const _BannerIA({required this.onGenerarReceta});
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -323,11 +371,7 @@ class _BannerIA extends StatelessWidget {
                     ),
                     const SizedBox(height: 10),
                     GestureDetector(
-                      onTap: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Próximamente')),
-                        );
-                      },
+                      onTap: onGenerarReceta,
                       child: Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 16, vertical: 8,
@@ -357,11 +401,16 @@ class _BannerIA extends StatelessWidget {
   }
 }
 
-/// Grid de tres estadísticas rápidas del usuario: recetas, despensa y aversiones.
 class _GridEstadisticas extends StatelessWidget {
   final int totalRecetas;
+  final int totalDespensa;
+  final int totalAversiones;
 
-  const _GridEstadisticas({required this.totalRecetas});
+  const _GridEstadisticas({
+    required this.totalRecetas,
+    required this.totalDespensa,
+    required this.totalAversiones,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -369,15 +418,14 @@ class _GridEstadisticas extends StatelessWidget {
       children: [
         _TileEstadistica(valor: '$totalRecetas', etiqueta: 'Recetas'),
         const SizedBox(width: 12),
-        _TileEstadistica(valor: '—', etiqueta: 'Despensa'),
+        _TileEstadistica(valor: '$totalDespensa', etiqueta: 'Despensa'),
         const SizedBox(width: 12),
-        _TileEstadistica(valor: '—', etiqueta: 'Aversiones'),
+        _TileEstadistica(valor: '$totalAversiones', etiqueta: 'Aversiones'),
       ],
     );
   }
 }
 
-/// Tile individual de estadística con valor numérico y etiqueta.
 class _TileEstadistica extends StatelessWidget {
   final String valor;
   final String etiqueta;
@@ -421,8 +469,6 @@ class _TileEstadistica extends StatelessWidget {
   }
 }
 
-/// Tarjeta compacta para mostrar una receta en el listado de recientes.
-/// Muestra una miniatura, el título, tiempo y nivel de dificultad.
 class _TarjetaRecetaCompacta extends StatelessWidget {
   final Receta receta;
   final String imagenUrl;
@@ -434,7 +480,6 @@ class _TarjetaRecetaCompacta extends StatelessWidget {
     required this.onTap,
   });
 
-  /// Traduce el código de dificultad a texto legible en español
   String _textoDificultad(String dificultad) {
     switch (dificultad) {
       case 'FACIL': return 'Fácil';
@@ -470,10 +515,11 @@ class _TarjetaRecetaCompacta extends StatelessWidget {
             ClipRRect(
               borderRadius: BorderRadius.circular(16),
               child: Image.network(
-                imagenUrl,
+                ImagenOptim.paraAncho(context, imagenUrl, 88),
                 width: 88,
                 height: 88,
                 fit: BoxFit.cover,
+                cacheWidth: ImagenOptim.anchoFisico(context, 88),
                 errorBuilder: (_, __, ___) => Container(
                   width: 88,
                   height: 88,
@@ -577,6 +623,348 @@ class _TarjetaRecetaCompacta extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _SeccionRecomendadas extends StatelessWidget {
+  final List<RecetaRecomendada> recomendadas;
+
+  final String Function(Receta, int) imagenReceta;
+
+  final Usuario usuario;
+
+  const _SeccionRecomendadas({
+    required this.recomendadas,
+    required this.imagenReceta,
+    required this.usuario,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(24, 28, 24, 0),
+          child: Row(
+            children: [
+              const Icon(
+                Icons.recommend_outlined,
+                color: Color(0xFF732b16),
+                size: 20,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                'Recomendadas para ti',
+                style: GoogleFonts.newsreader(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w500,
+                  color: const Color(0xFF211a18),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 4),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Text(
+            'Sugerencias del motor de recomendacion segun tu perfil sensorial.',
+            style: GoogleFonts.inter(
+              fontSize: 12,
+              color: const Color(0xFF88726d),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+
+        // Estado vacio: invita a generar la primera receta para que el
+        // motor pueda empezar a recomendar contenido relevante.
+        if (recomendadas.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: _EstadoSinRecomendaciones(usuario: usuario),
+          )
+        else
+          // Carrusel horizontal con las recetas mejor puntuadas
+          SizedBox(
+            height: 220,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              itemCount: recomendadas.length,
+              itemBuilder: (context, index) {
+                final receta = recomendadas[index];
+                return Padding(
+                  padding: const EdgeInsets.only(right: 12),
+                  child: _TarjetaRecomendada(
+                    receta: receta,
+                    imagenUrl: imagenReceta(receta, index),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => RecetaDetalleView(
+                            recetaId: receta.id,
+                            titulo: receta.titulo,
+                            imagenUrl: imagenReceta(receta, index),
+                            usuario: usuario,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                );
+              },
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _TarjetaRecomendada extends StatelessWidget {
+  final RecetaRecomendada receta;
+  final String imagenUrl;
+  final VoidCallback onTap;
+
+  const _TarjetaRecomendada({
+    required this.receta,
+    required this.imagenUrl,
+    required this.onTap,
+  });
+
+  Color _colorBadge(int score) {
+    if (score >= 80) return const Color(0xFF7f5700);
+    if (score >= 60) return const Color(0xFF91412b);
+    return const Color(0xFF88726d);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 220,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(
+            color: const Color(0xFFdbc1ba).withOpacity(0.3),
+          ),
+        ),
+        clipBehavior: Clip.hardEdge,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Imagen de cabecera con badge de puntuacion superpuesto
+            SizedBox(
+              height: 110,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Image.network(
+                    // Carrusel horizontal: cada tarjeta ronda los 280px
+                    // de ancho. Pedir esa resolucion exacta optimiza la
+                    // descarga sin perder nitidez en pantallas HiDPI.
+                    ImagenOptim.paraAncho(context, imagenUrl, 280),
+                    fit: BoxFit.cover,
+                    cacheWidth: ImagenOptim.anchoFisico(context, 280),
+                    errorBuilder: (_, __, ___) => Container(
+                      color: const Color(0xFFf4e5e2),
+                      child: const Center(
+                        child: Icon(
+                          Icons.restaurant,
+                          color: Color(0xFF732b16),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.95),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.star,
+                            size: 12,
+                            color: _colorBadge(receta.score),
+                          ),
+                          const SizedBox(width: 3),
+                          Text(
+                            '${receta.score}',
+                            style: GoogleFonts.inter(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: _colorBadge(receta.score),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // Informacion textual de la receta
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      receta.titulo,
+                      style: GoogleFonts.newsreader(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w500,
+                        color: const Color(0xFF211a18),
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Expanded(
+                      child: Text(
+                        receta.motivoRecomendacion,
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          fontStyle: FontStyle.italic,
+                          color: const Color(0xFF88726d),
+                          height: 1.3,
+                        ),
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.access_time,
+                          size: 12,
+                          color: Color(0xFF88726d),
+                        ),
+                        const SizedBox(width: 3),
+                        Text(
+                          '${receta.tiempoTotal} min',
+                          style: GoogleFonts.inter(
+                            fontSize: 11,
+                            color: const Color(0xFF88726d),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _EstadoSinRecomendaciones extends StatelessWidget {
+  final Usuario usuario;
+
+  const _EstadoSinRecomendaciones({required this.usuario});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: const Color(0xFFfff0ed),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: const Color(0xFFdbc1ba).withOpacity(0.4),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.auto_awesome,
+                color: Color(0xFF732b16),
+                size: 18,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Aun no hay recomendaciones',
+                style: GoogleFonts.newsreader(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w500,
+                  color: const Color(0xFF732b16),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Genera tu primera receta con IA para que el motor empiece a aprender de tu perfil.',
+            style: GoogleFonts.inter(
+              fontSize: 13,
+              color: const Color(0xFF55433e),
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 12),
+          GestureDetector(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => GenerarRecetaView(usuario: usuario),
+                ),
+              );
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 8,
+              ),
+              decoration: BoxDecoration(
+                color: const Color(0xFF732b16),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.auto_awesome,
+                    size: 14,
+                    color: Colors.white,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Generar receta',
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

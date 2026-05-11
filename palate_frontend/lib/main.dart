@@ -1,14 +1,25 @@
 import 'package:flutter/material.dart';
+import 'services/notification_service.dart';
 import 'theme/app_theme.dart';
 import 'views/login_view.dart';
 
-void main() {
+Future<void> main() async {
+  // Garantiza que los plugins de Flutter esten inicializados antes de
+  // realizar llamadas asincronas a paquetes nativos.
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Inicializa el servicio de notificaciones de forma defensiva: si fallase
+  // por algun motivo, la app continua arrancando con normalidad y los
+  // temporizadores funcionarian solo en primer plano.
+  try {
+    await NotificationService.instancia.init();
+  } catch (_) {
+    // Inicializacion fallida; la app sigue funcionando sin notificaciones
+  }
+
   runApp(const PalateApp());
 }
 
-/// Clase raíz de la aplicación Palate.
-/// Configura el tema global y establece la pantalla de inicio de sesión
-/// como punto de entrada de la navegación.
 class PalateApp extends StatelessWidget {
   const PalateApp({super.key});
 

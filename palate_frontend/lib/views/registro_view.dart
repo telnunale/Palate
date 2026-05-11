@@ -2,9 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../viewmodels/registro_viewmodel.dart';
 
-/// Pantalla de registro de nuevos usuarios.
-/// Recoge nombre, email y contraseña, y los envía al servidor
-/// para crear una cuenta nueva.
 class RegistroView extends StatefulWidget {
   const RegistroView({super.key});
 
@@ -19,11 +16,9 @@ class _RegistroViewState extends State<RegistroView> {
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
 
-  /// Controla la visibilidad de la contraseña
   bool _ocultarPassword = true;
   bool _ocultarConfirmPassword = true;
 
-  /// Indica si el usuario ha aceptado los términos y condiciones
   bool _terminosAceptados = false;
 
   @override
@@ -35,8 +30,6 @@ class _RegistroViewState extends State<RegistroView> {
     super.dispose();
   }
 
-  /// Valida los campos y envía la petición de registro al servidor.
-  /// Verifica que las contraseñas coincidan antes de llamar a la API.
   void _registro() async {
     if (!_terminosAceptados) {
       setState(() {
@@ -57,9 +50,13 @@ class _RegistroViewState extends State<RegistroView> {
     _viewModel.password = _passwordController.text;
 
     final ok = await _viewModel.registro();
+
+    // Si el usuario salio de la pantalla durante la peticion, evitamos
+    // refrescar un widget desechado.
+    if (!mounted) return;
     setState(() {});
 
-    if (ok && mounted) {
+    if (ok) {
       // Tras el registro exitoso, vuelve al login tras 2 segundos
       Future.delayed(const Duration(seconds: 2), () {
         if (mounted) Navigator.pop(context);
@@ -77,7 +74,6 @@ class _RegistroViewState extends State<RegistroView> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ── Cabecera con logo y enlace de vuelta al login ──
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -116,7 +112,6 @@ class _RegistroViewState extends State<RegistroView> {
               ),
               const SizedBox(height: 32),
 
-              // ── Título y subtítulo del formulario ──
               Text(
                 'Crear cuenta',
                 style: GoogleFonts.newsreader(
@@ -135,7 +130,6 @@ class _RegistroViewState extends State<RegistroView> {
               ),
               const SizedBox(height: 32),
 
-              // ── Campo: nombre completo ──
               _EtiquetaCampo(texto: 'NOMBRE COMPLETO'),
               const SizedBox(height: 8),
               _CampoTexto(
@@ -146,7 +140,6 @@ class _RegistroViewState extends State<RegistroView> {
               ),
               const SizedBox(height: 20),
 
-              // ── Campo: correo electrónico ──
               _EtiquetaCampo(texto: 'CORREO ELECTRÓNICO'),
               const SizedBox(height: 8),
               _CampoTexto(
@@ -157,7 +150,6 @@ class _RegistroViewState extends State<RegistroView> {
               ),
               const SizedBox(height: 20),
 
-              // ── Campo: contraseña ──
               _EtiquetaCampo(texto: 'CONTRASEÑA'),
               const SizedBox(height: 8),
               _CampoPassword(
@@ -167,7 +159,6 @@ class _RegistroViewState extends State<RegistroView> {
               ),
               const SizedBox(height: 20),
 
-              // ── Campo: confirmación de contraseña ──
               _EtiquetaCampo(texto: 'CONFIRMAR CONTRASEÑA'),
               const SizedBox(height: 8),
               _CampoPassword(
@@ -180,7 +171,6 @@ class _RegistroViewState extends State<RegistroView> {
               ),
               const SizedBox(height: 20),
 
-              // ── Checkbox de términos y condiciones ──
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -208,7 +198,6 @@ class _RegistroViewState extends State<RegistroView> {
                 ],
               ),
 
-              // ── Mensaje de error ──
               if (_viewModel.error != null) ...[
                 const SizedBox(height: 12),
                 Container(
@@ -239,7 +228,6 @@ class _RegistroViewState extends State<RegistroView> {
                 ),
               ],
 
-              // ── Mensaje de éxito tras el registro ──
               if (_viewModel.exito != null) ...[
                 const SizedBox(height: 12),
                 Container(
@@ -272,7 +260,6 @@ class _RegistroViewState extends State<RegistroView> {
 
               const SizedBox(height: 28),
 
-              // ── Botón de registro con gradiente ──
               SizedBox(
                 width: double.infinity,
                 height: 54,
@@ -337,7 +324,6 @@ class _RegistroViewState extends State<RegistroView> {
   }
 }
 
-/// Etiqueta de campo en mayúsculas con estilo label-lg del diseño.
 class _EtiquetaCampo extends StatelessWidget {
   final String texto;
   const _EtiquetaCampo({required this.texto});
@@ -356,7 +342,6 @@ class _EtiquetaCampo extends StatelessWidget {
   }
 }
 
-/// Campo de texto genérico con icono de prefijo.
 class _CampoTexto extends StatelessWidget {
   final TextEditingController controller;
   final IconData icono;
@@ -394,7 +379,6 @@ class _CampoTexto extends StatelessWidget {
   }
 }
 
-/// Campo de texto para contraseña con botón de mostrar/ocultar.
 class _CampoPassword extends StatelessWidget {
   final TextEditingController controller;
   final bool ocultar;

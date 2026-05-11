@@ -13,6 +13,12 @@ public class MotivoRechazo {
     @Column(name = "id")
     private Long id;
 
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "intolerancia_id", nullable = false)
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    private IntoleranciaUsuario intolerancia;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "tipo", nullable = false)
     private TipoMotivoRechazo tipo;
@@ -26,6 +32,14 @@ public class MotivoRechazo {
     public MotivoRechazo(TipoMotivoRechazo tipo, int intensidad) {
         this.tipo = tipo;
         this.intensidad = intensidad;
+    }
+
+    public IntoleranciaUsuario getIntolerancia() {
+        return intolerancia;
+    }
+
+    public void setIntolerancia(IntoleranciaUsuario intolerancia) {
+        this.intolerancia = intolerancia;
     }
 
     public Long getId() {

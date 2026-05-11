@@ -36,8 +36,10 @@ public class IntoleranciaUsuario {
     @Column(name = "ultima_actualizacion", nullable = false)
     private LocalDate ultimaActualizacion;
 
-    @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
-    @JoinColumn(name = "intolerancia_id")
+    @Column(name = "superada", nullable = false)
+    private boolean superada = false;
+
+    @OneToMany(mappedBy = "intolerancia", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
     private List<MotivoRechazo> motivos = new ArrayList<>();
 
     public IntoleranciaUsuario() {
@@ -52,6 +54,11 @@ public class IntoleranciaUsuario {
     @PrePersist
     protected void onCreate() {
         this.fechaRegistro = LocalDate.now();
+        this.ultimaActualizacion = LocalDate.now();
+    }
+
+    @PreUpdate
+    protected void onUpdate() {
         this.ultimaActualizacion = LocalDate.now();
     }
 
@@ -111,12 +118,25 @@ public class IntoleranciaUsuario {
         this.ultimaActualizacion = ultimaActualizacion;
     }
 
+    public boolean isSuperada() {
+        return superada;
+    }
+
+    public void setSuperada(boolean superada) {
+        this.superada = superada;
+    }
+
     public List<MotivoRechazo> getMotivos() {
         return motivos;
     }
 
     public void setMotivos(List<MotivoRechazo> motivos) {
         this.motivos = motivos;
+    }
+
+    public void addMotivo(MotivoRechazo motivo) {
+        motivo.setIntolerancia(this);
+        this.motivos.add(motivo);
     }
 
     @Override

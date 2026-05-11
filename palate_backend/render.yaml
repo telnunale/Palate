@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: palate-backend
+    env: java
+    region: frankfurt
+    plan: free
+    buildCommand: ./mvnw clean package -DskipTests
+    startCommand: java -jar target/palate-backend-0.0.1-SNAPSHOT.jar
+    healthCheckPath: /api/recetas
+    envVars:
+      - key: SPRING_DATASOURCE_URL
+        sync: false
+      - key: SPRING_DATASOURCE_USERNAME
+        sync: false
+      - key: SPRING_DATASOURCE_PASSWORD
+        sync: false
+      - key: PALATE_GEMINI_API_KEY
+        sync: false
+      - key: PALATE_PEXELS_API_KEY
+        sync: false
+      - key: PALATE_FAL_API_KEY
+        sync: false
+      - key: PALATE_CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: PALATE_CLOUDINARY_API_KEY
+        sync: false
+      - key: PALATE_CLOUDINARY_API_SECRET
+        sync: false
+      - key: PALATE_EDAMAM_APP_ID
+        sync: false
+      - key: PALATE_EDAMAM_APP_KEY
+        sync: false

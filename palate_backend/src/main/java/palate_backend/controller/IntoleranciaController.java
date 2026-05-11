@@ -1,5 +1,6 @@
 package palate_backend.controller;
 
+import palate_backend.dto.FeedbackDTO;
 import palate_backend.dto.IntoleranciaDTO;
 import palate_backend.service.IntoleranciaService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -48,11 +49,46 @@ public class IntoleranciaController {
         }
     }
 
+    @PutMapping("/{id}")
+    public ResponseEntity<Object> actualizar(@PathVariable Long id,
+                                             @RequestBody Map<String, Object> datos) {
+        try {
+            int nivelRechazo = Integer.parseInt(datos.get("nivelRechazo").toString());
+
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> motivos = (List<Map<String, Object>>) datos.get("motivos");
+
+            intoleranciaService.actualizar(id, nivelRechazo, motivos);
+            Map<String, String> respuesta = new HashMap<>();
+            respuesta.put("mensaje", "Aversion actualizada correctamente");
+            return ResponseEntity.ok(respuesta);
+        } catch (IllegalArgumentException e) {
+            Map<String, String> error = new HashMap<>();
+            error.put("error", e.getMessage());
+            return ResponseEntity.badRequest().body(error);
+        }
+    }
+
     @DeleteMapping("/{id}")
     public ResponseEntity<Object> eliminar(@PathVariable Long id) {
         intoleranciaService.eliminar(id);
         Map<String, String> respuesta = new HashMap<>();
         respuesta.put("mensaje", "Intolerancia eliminada correctamente");
         return ResponseEntity.ok(respuesta);
+    }
+
+    @PostMapping("/{id}/feedback")
+    public ResponseEntity<Object> registrarFeedback(@PathVariable Long id,
+                                                    @RequestBody FeedbackDTO feedback) {
+        try {
+            IntoleranciaDTO actualizada = intoleranciaService.registrarFeedback(
+                    id, feedback.isTolerado()
+            );
+            return ResponseEntity.ok(actualizada);
+        } catch (IllegalArgumentException e) {
+            Map<String, String> error = new HashMap<>();
+            error.put("error", e.getMessage());
+            return ResponseEntity.badRequest().body(error);
+        }
     }
 }

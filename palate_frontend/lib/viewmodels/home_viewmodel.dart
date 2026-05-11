@@ -1,26 +1,21 @@
 import 'package:flutter/material.dart';
 import '../models/receta.dart';
+import '../models/receta_recomendada.dart';
 import '../services/api_service.dart';
 
-/// ViewModel para la pantalla de inicio (Home).
-/// Sigue el patrón MVVM: recupera datos del servidor y notifica
-/// a la vista para que se actualice cuando los datos cambian.
 class HomeViewModel extends ChangeNotifier {
   final ApiService _apiService = ApiService();
 
-  /// Lista completa de recetas cargadas desde el servidor
   List<Receta> recetas = [];
+  List<RecetaRecomendada> recetasRecomendadas = [];
+  int totalDespensa = 0;
+  int totalAversiones = 0;
 
-  /// Indica si hay una operación de carga en curso
   bool cargando = true;
-
-  /// Mensaje de error si la carga falla
   String? error;
 
-  /// Número total de recetas disponibles
   int get totalRecetas => recetas.length;
 
-  /// Las dos recetas más recientes, ordenadas por id descendente
   List<Receta> get recetasRecientes {
     if (recetas.isEmpty) return [];
     final ordenadas = List<Receta>.from(recetas)
@@ -28,15 +23,35 @@ class HomeViewModel extends ChangeNotifier {
     return ordenadas.take(2).toList();
   }
 
-  /// Carga los datos necesarios para la pantalla de inicio.
-  /// Obtiene las recetas del servidor para mostrar estadísticas y recientes.
-  Future<void> cargarDatos() async {
+  Future<void> cargarDatos(int usuarioId) async {
     cargando = true;
     error = null;
     notifyListeners();
 
     try {
-      recetas = await _apiService.obtenerRecetas();
+      final resultados = await Future.wait([
+        _apiService.obtenerRecetas(),
+        _apiService.obtenerRecomendaciones(usuarioId).catchError(
+          (_) => <RecetaRecomendada>[],
+        ),
+        _apiService.obtenerDespensa(usuarioId).catchError(
+          (_) => <Map<String, dynamic>>[],
+        ),
+        _apiService.obtenerAversiones(usuarioId).catchError(
+          (_) => <Map<String, dynamic>>[],
+        ),
+      ]);
+      recetas = resultados[0] as List<Receta>;
+      recetasRecomendadas = resultados[1] as List<RecetaRecomendada>;
+
+      final despensaJson = resultados[2] as List<Map<String, dynamic>>;
+      totalDespensa = despensaJson
+          .where((p) => p['consumido'] != true)
+          .length;
+
+      final aversionesJson = resultados[3] as List<Map<String, dynamic>>;
+      totalAversiones = aversionesJson.length;
+
       cargando = false;
       notifyListeners();
     } catch (e) {

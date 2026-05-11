@@ -1,0 +1,22 @@
+# Plantilla para configuracion local. Copiar como application-local.properties
+# y rellenar con credenciales propias antes de arrancar el backend localmente:
+#
+#   ./mvnw spring-boot:run -Dspring-boot.run.profiles=local
+#
+# Las credenciales reales NO se incluyen en el repositorio.
+
+spring.datasource.url=jdbc:postgresql://<host>/<db>?sslmode=require
+spring.datasource.username=
+spring.datasource.password=
+
+palate.gemini.api-key=
+palate.pexels.api-key=
+palate.fal.api-key=
+
+palate.cloudinary.cloud-name=
+palate.cloudinary.api-key=
+palate.cloudinary.api-secret=
+palate.cloudinary.folder=palate/recetas
+
+palate.edamam.app-id=
+palate.edamam.app-key=

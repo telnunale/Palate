@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../models/intolerancia.dart';
 import '../models/receta.dart';
 import '../services/api_service.dart';
 
@@ -6,6 +7,8 @@ class RecetasViewModel extends ChangeNotifier {
   final ApiService _apiService = ApiService();
 
   List<Receta> recetas = [];
+  List<Intolerancia> aversiones = [];
+
   bool cargando = true;
   String? error;
 
@@ -21,6 +24,20 @@ class RecetasViewModel extends ChangeNotifier {
     } catch (e) {
       error = 'No se pudieron cargar las recetas';
       cargando = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> cargarAversiones(int usuarioId) async {
+    try {
+      final datos = await _apiService.obtenerAversiones(usuarioId);
+      aversiones = datos
+          .map((j) => Intolerancia.fromJson(j))
+          .where((a) => !a.superada)
+          .toList();
+      notifyListeners();
+    } catch (_) {
+      aversiones = [];
       notifyListeners();
     }
   }

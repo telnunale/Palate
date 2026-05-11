@@ -44,6 +44,14 @@ cd Palate
 
 
 
+O backend está desplegado en Render: `https://palate-backend-XXXX.onrender.com`. A aplicación móbil xa apunta a este endpoint, polo que **non é necesario arrancar o backend localmente** para probar a aplicación.
+
+
+
+Para arrancalo en local (opcional):
+
+
+
 ```bash
 
 cd palate\_backend
@@ -52,29 +60,25 @@ cd palate\_backend
 
 
 
-Abrir o arquivo `src/main/resources/application.properties` e configurar a conexión á base de datos PostgreSQL (Neon):
-
-
-
-```properties
-
-spring.datasource.url=jdbc:postgresql://SEU\_HOST\_NEON/neondb?sslmode=require
-
-spring.datasource.username=SEU\_USUARIO
-
-spring.datasource.password=SEA\_CONTRASINAL
-
-```
-
-
-
-Executar o backend:
+Copiar a plantilla de credenciais e rellenala coas chaves propias dos servizos externos (Gemini, fal.ai, Cloudinary, Edamam, Pexels, Neon):
 
 
 
 ```bash
 
-./mvnw spring-boot:run
+cp src/main/resources/application-local.properties.example src/main/resources/application-local.properties
+
+```
+
+
+
+Arrancar con o perfil `local`:
+
+
+
+```bash
+
+./mvnw spring-boot:run -Dspring-boot.run.profiles=local
 
 ```
 
@@ -86,13 +90,13 @@ En Windows:
 
 ```bash
 
-mvnw.cmd spring-boot:run
+mvnw.cmd spring-boot:run "-Dspring-boot.run.profiles=local"
 
 ```
 
 
 
-O servidor arrancará en `http://localhost:8080`.
+O servidor arrancará en `http://localhost:8080`. As credenciais reais nunca se inclúen no repositorio.
 
 
 

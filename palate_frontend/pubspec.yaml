@@ -34,6 +34,10 @@ dependencies:
   cupertino_icons: ^1.0.8
   http: ^1.6.0
   google_fonts: ^6.2.1
+  table_calendar: ^3.1.2
+  flutter_local_notifications: ^17.2.4
+  shared_preferences: ^2.3.5
+  timezone: ^0.9.4
 
 dev_dependencies:
   flutter_test:
@@ -45,6 +49,20 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+
+  # Genera los iconos de la aplicacion para Android e iOS a partir de la
+  # imagen base situada en assets/icon. Se ejecuta con:
+  #   dart run flutter_launcher_icons
+  flutter_launcher_icons: ^0.14.1
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/icon/app_icon.png"
+  min_sdk_android: 21
+  adaptive_icon_background: "#732b16"
+  adaptive_icon_foreground: "assets/icon/app_icon_foreground.png"
+  remove_alpha_ios: true
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

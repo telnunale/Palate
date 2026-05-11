@@ -1,25 +1,31 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../models/intolerancia.dart';
+import '../models/usuario.dart';
 import '../services/api_service.dart';
+import '../utils/formato_cantidad.dart';
+import '../utils/imagen_optim.dart';
+import '../utils/parser_tiempos.dart';
+import 'feedback_dialog.dart';
+import 'modo_cocina_view.dart';
+import 'temporizador_dialog.dart';
 
-/// Pantalla de detalle de una receta.
-/// Muestra la imagen, información general, lista de ingredientes con
-/// codificación visual por rol, e instrucciones paso a paso.
+///
 class RecetaDetalleView extends StatefulWidget {
-  /// Identificador de la receta a mostrar
   final int recetaId;
 
-  /// Título de la receta, mostrado mientras carga el detalle completo
   final String titulo;
 
-  /// URL de la imagen representativa de la receta
   final String imagenUrl;
+
+  final Usuario? usuario;
 
   const RecetaDetalleView({
     super.key,
     required this.recetaId,
     required this.titulo,
     required this.imagenUrl,
+    this.usuario,
   });
 
   @override
@@ -29,35 +35,124 @@ class RecetaDetalleView extends StatefulWidget {
 class _RecetaDetalleViewState extends State<RecetaDetalleView> {
   final ApiService _apiService = ApiService();
 
-  /// Datos completos de la receta devueltos por el servidor
   Map<String, dynamic>? receta;
 
-  /// Indica si se está cargando la información
+  List<Intolerancia> _aversionesAfectadas = const [];
+
   bool cargando = true;
 
   @override
   void initState() {
     super.initState();
-    _cargarReceta();
+    _cargarDatos();
   }
 
-  /// Solicita al servidor el detalle completo de la receta,
-  /// incluyendo los ingredientes con sus roles y métodos de preparación.
-  Future<void> _cargarReceta() async {
+  Future<void> _cargarDatos() async {
     try {
       final datos = await _apiService.obtenerRecetaPorId(widget.recetaId);
+
+      List<Intolerancia> afectadas = const [];
+      if (widget.usuario != null) {
+        afectadas = await _detectarAversionesAfectadas(datos);
+      }
+
+      if (!mounted) return;
       setState(() {
         receta = datos;
+        _aversionesAfectadas = afectadas;
         cargando = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         cargando = false;
       });
     }
   }
 
-  /// Traduce el código de dificultad a texto en español
+  Future<List<Intolerancia>> _detectarAversionesAfectadas(
+    Map<String, dynamic> recetaJson,
+  ) async {
+    try {
+      final aversionesJson =
+          await _apiService.obtenerAversiones(widget.usuario!.id);
+      final aversiones = aversionesJson
+          .map((json) => Intolerancia.fromJson(json))
+          .where((a) => !a.superada)
+          .toList();
+
+      final ingredientes =
+          (recetaJson['ingredientes'] as List<dynamic>?) ?? const [];
+      final idsIngredientes = ingredientes
+          .map((ing) => (ing['alimento'] as Map<String, dynamic>?)?['id'])
+          .whereType<int>()
+          .toSet();
+
+      return aversiones
+          .where((a) => idsIngredientes.contains(a.alimentoId))
+          .toList();
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  Future<void> _onCocinar() async {
+    if (receta == null) return;
+
+    // Reutiliza el mismo parser que la seccion de instrucciones de la
+    // pantalla de detalle para mantener una sola fuente de verdad sobre
+    // como dividir el texto en pasos individuales.
+    final pasos = _parsearPasos((receta!['instrucciones'] as String?) ?? '');
+    if (pasos.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Esta receta no tiene pasos detallados.')),
+      );
+      return;
+    }
+
+    final resultado = await Navigator.push<ResultadoFeedback>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ModoCocinaView(
+          tituloReceta: (receta!['titulo'] as String?) ?? '',
+          imagenUrl: widget.imagenUrl,
+          pasos: pasos,
+          recetaId: (receta!['id'] as int?) ?? 0,
+          aversionesAfectadas: _aversionesAfectadas,
+        ),
+      ),
+    );
+
+    if (!mounted) return;
+
+    // Si el usuario abandono el modo cocina antes de terminar (back
+    // button + confirmacion), no se muestra ningun mensaje para no
+    // contradecir su decision de no completar la receta.
+    if (resultado == null) return;
+
+    String mensaje;
+    switch (resultado) {
+      case ResultadoFeedback.tolerado:
+        mensaje = '¡Buen trabajo! Tu progreso ha avanzado.';
+        break;
+      case ResultadoFeedback.dificultad:
+        mensaje = 'Gracias por la sinceridad. Lo intentaremos con menos intensidad.';
+        break;
+      case ResultadoFeedback.saltado:
+        mensaje = '¡Buen provecho! 🍽️';
+        break;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(mensaje)),
+    );
+  }
+
+  List<String> _parsearPasos(String texto) {
+    final pasos = texto.split(RegExp(r'\d+\.\s*'));
+    return pasos.where((p) => p.trim().isNotEmpty).toList();
+  }
+
   String _textoDificultad(String dificultad) {
     switch (dificultad) {
       case 'FACIL': return 'Fácil';
@@ -67,10 +162,6 @@ class _RecetaDetalleViewState extends State<RecetaDetalleView> {
     }
   }
 
-  /// Determina el color del borde izquierdo del ingrediente según su rol.
-  /// - PROTAGONISTA: terracota (color primario)
-  /// - SECUNDARIO: ámbar (color secundario)
-  /// - COMPLEMENTO: gris (color de contorno)
   Color _colorPorRol(String? rol) {
     switch (rol) {
       case 'PROTAGONISTA': return const Color(0xFF732b16);
@@ -81,6 +172,7 @@ class _RecetaDetalleViewState extends State<RecetaDetalleView> {
 
   @override
   Widget build(BuildContext context) {
+    final tieneReceta = !cargando && receta != null;
     return Scaffold(
       backgroundColor: const Color(0xFFfff8f6),
       body: cargando
@@ -99,40 +191,51 @@ class _RecetaDetalleViewState extends State<RecetaDetalleView> {
                   imagenUrl: widget.imagenUrl,
                   onColorPorRol: _colorPorRol,
                   onTextoDificultad: _textoDificultad,
+                  aversionesAfectadas: _aversionesAfectadas,
                 ),
+      // La barra de acciones se monta como bottomNavigationBar para que
+      // Scaffold reserve automaticamente el espacio inferior y el ultimo
+      // paso de las instrucciones nunca quede tapado por la barra fija
+      // ni por los gestos del sistema (home indicator iOS, gesture bar
+      // Android). Reemplaza el patron previo Stack + Positioned que
+      // requeria un SizedBox manual cuyo alto era frecuentemente
+      // insuficiente cuando aparecia el aviso de aversiones.
+      bottomNavigationBar: tieneReceta
+          ? _BarraAcciones(
+              aversionesAfectadas: _aversionesAfectadas,
+              onCocinar: _onCocinar,
+            )
+          : null,
     );
   }
 }
 
-/// Widget que contiene todo el contenido visual del detalle de la receta.
 class _ContenidoDetalle extends StatelessWidget {
   final Map<String, dynamic> receta;
   final String imagenUrl;
   final Color Function(String?) onColorPorRol;
   final String Function(String) onTextoDificultad;
 
+  final List<Intolerancia> aversionesAfectadas;
+
   const _ContenidoDetalle({
     required this.receta,
     required this.imagenUrl,
     required this.onColorPorRol,
     required this.onTextoDificultad,
+    required this.aversionesAfectadas,
   });
 
   @override
   Widget build(BuildContext context) {
     final esIA = receta['generadaPorIa'] == true;
 
-    return Stack(
-      children: [
-        // ── Contenido principal con scroll ──
-        CustomScrollView(
-          slivers: [
-            // ── Barra de navegación superior (fija) ──
+    return CustomScrollView(
+      slivers: [
             SliverToBoxAdapter(
               child: _BarraSuperior(),
             ),
 
-            // ── Imagen hero con esquinas inferiores redondeadas ──
             SliverToBoxAdapter(
               child: _ImagenHero(
                 imagenUrl: imagenUrl,
@@ -140,7 +243,6 @@ class _ContenidoDetalle extends StatelessWidget {
               ),
             ),
 
-            // ── Sección de información general ──
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
@@ -194,15 +296,29 @@ class _ContenidoDetalle extends StatelessWidget {
                           colorIcono: const Color(0xFF7f5700),
                           colorTexto: const Color(0xFF7f5700),
                         ),
+                        if (receta['caloriasTotal'] != null)
+                          _ChipInfo(
+                            icono: Icons.bolt,
+                            valor: '${(receta['caloriasTotal'] as num).round()} kcal',
+                            etiqueta: 'Energía',
+                            colorIcono: const Color(0xFF7f5700),
+                          ),
                       ],
                     ),
+                    if (receta['caloriasTotal'] != null) ...[
+                      const SizedBox(height: 12),
+                      _BloqueMacros(
+                        proteinas: (receta['proteinasTotal'] as num?)?.toDouble(),
+                        hidratos: (receta['hidratosTotal'] as num?)?.toDouble(),
+                        grasas: (receta['grasasTotal'] as num?)?.toDouble(),
+                      ),
+                    ],
                     const SizedBox(height: 28),
                   ],
                 ),
               ),
             ),
 
-            // ── Sección de ingredientes ──
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -215,35 +331,30 @@ class _ContenidoDetalle extends StatelessWidget {
 
             const SliverToBoxAdapter(child: SizedBox(height: 28)),
 
-            // ── Sección de instrucciones paso a paso ──
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: _SeccionInstrucciones(
                   instrucciones:
                       (receta['instrucciones'] as String?) ?? '',
+                  // El id de la receta se utiliza para construir el id unico
+                  // del temporizador de cada paso, garantizando que dos pasos
+                  // de recetas distintas no compartan notificacion.
+                  recetaId: (receta['id'] as int?) ?? 0,
                 ),
               ),
             ),
 
-            // Espacio para que el contenido no quede tapado por la barra inferior
-            const SliverToBoxAdapter(child: SizedBox(height: 100)),
+            // Pequeno margen final para separar el ultimo paso del borde
+            // inferior del contenido. Scaffold ya reserva el alto de la
+            // barra de acciones, asi que aqui no hace falta compensar
+            // por la barra ni por los gestos del sistema.
+            const SliverToBoxAdapter(child: SizedBox(height: 16)),
           ],
-        ),
-
-        // ── Barra inferior fija con acciones principales ──
-        Positioned(
-          bottom: 0,
-          left: 0,
-          right: 0,
-          child: const _BarraAcciones(),
-        ),
-      ],
-    );
+        );
   }
 }
 
-/// Barra de navegación superior con botones de volver y compartir.
 class _BarraSuperior extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
@@ -251,9 +362,8 @@ class _BarraSuperior extends StatelessWidget {
       color: const Color(0xFFFFFBF7),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // Botón volver
+          // Boton volver
           GestureDetector(
             onTap: () => Navigator.pop(context),
             child: Container(
@@ -270,8 +380,7 @@ class _BarraSuperior extends StatelessWidget {
               ),
             ),
           ),
-
-          // Logotipo centrado
+          const SizedBox(width: 12),
           Text(
             'Palate',
             style: GoogleFonts.newsreader(
@@ -281,29 +390,12 @@ class _BarraSuperior extends StatelessWidget {
               color: const Color(0xFF732b16),
             ),
           ),
-
-          // Botón compartir
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: const Color(0xFFfff0ed),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: const Icon(
-              Icons.share_outlined,
-              color: Color(0xFF732b16),
-              size: 20,
-            ),
-          ),
         ],
       ),
     );
   }
 }
 
-/// Imagen de cabecera con esquinas inferiores redondeadas.
-/// Muestra el badge "Generada por IA" si corresponde.
 class _ImagenHero extends StatelessWidget {
   final String imagenUrl;
   final bool esGeneradaPorIA;
@@ -315,6 +407,11 @@ class _ImagenHero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Hero a ancho completo de pantalla. Pedimos al CDN una imagen al
+    // ancho fisico exacto y dejamos que Flutter la decodifique al mismo
+    // tamano para no malgastar memoria con bitmaps sobredimensionados.
+    final anchoLogico = MediaQuery.of(context).size.width;
+    final urlOptimizada = ImagenOptim.paraAncho(context, imagenUrl, anchoLogico);
     return ClipRRect(
       borderRadius: const BorderRadius.only(
         bottomLeft: Radius.circular(48),
@@ -327,8 +424,9 @@ class _ImagenHero extends StatelessWidget {
           fit: StackFit.expand,
           children: [
             Image.network(
-              imagenUrl,
+              urlOptimizada,
               fit: BoxFit.cover,
+              cacheWidth: ImagenOptim.anchoFisico(context, anchoLogico),
               errorBuilder: (_, __, ___) => Container(
                 color: const Color(0xFFf4e5e2),
                 child: const Center(
@@ -370,7 +468,6 @@ class _ImagenHero extends StatelessWidget {
   }
 }
 
-/// Chip de información con icono, valor principal y etiqueta secundaria.
 class _ChipInfo extends StatelessWidget {
   final IconData icono;
   final String valor;
@@ -425,7 +522,6 @@ class _ChipInfo extends StatelessWidget {
   }
 }
 
-/// Sección de ingredientes con grid y codificación de color por rol.
 class _SeccionIngredientes extends StatelessWidget {
   final List<dynamic> ingredientes;
   final Color Function(String?) onColorPorRol;
@@ -479,14 +575,14 @@ class _SeccionIngredientes extends StatelessWidget {
               final ing = ingredientes[index] as Map<String, dynamic>;
               final alimento = ing['alimento'] as Map<String, dynamic>?;
               final nombre = alimento?['nombre'] as String? ?? 'Desconocido';
-              final cantidad = ing['cantidad']?.toString() ?? '';
+              final cantidadNum = (ing['cantidad'] as num?)?.toDouble() ?? 0;
               final unidad = (ing['unidadMedida'] as String?) ?? '';
               final rol = ing['rol'] as String?;
               final oculto = ing['oculto'] == true;
 
               return _TarjetaIngrediente(
                 nombre: nombre,
-                cantidad: '$cantidad $unidad'.trim(),
+                cantidad: FormatoCantidad.legible(cantidadNum, unidad),
                 colorBorde: onColorPorRol(rol),
                 oculto: oculto,
               );
@@ -497,7 +593,6 @@ class _SeccionIngredientes extends StatelessWidget {
   }
 }
 
-/// Tarjeta individual de ingrediente con borde izquierdo de color según rol.
 class _TarjetaIngrediente extends StatelessWidget {
   final String nombre;
   final String cantidad;
@@ -567,14 +662,16 @@ class _TarjetaIngrediente extends StatelessWidget {
   }
 }
 
-/// Sección de instrucciones con pasos numerados y línea conectora visual.
 class _SeccionInstrucciones extends StatelessWidget {
   final String instrucciones;
 
-  const _SeccionInstrucciones({required this.instrucciones});
+  final int recetaId;
 
-  /// Divide el texto de instrucciones en pasos individuales.
-  /// El servidor devuelve los pasos numerados como "1. Paso uno 2. Paso dos..."
+  const _SeccionInstrucciones({
+    required this.instrucciones,
+    required this.recetaId,
+  });
+
   List<String> _parsearPasos(String texto) {
     final pasos = texto.split(RegExp(r'\d+\.\s*'));
     return pasos.where((p) => p.trim().isNotEmpty).toList();
@@ -626,6 +723,9 @@ class _SeccionInstrucciones extends StatelessWidget {
                 numero: index + 1,
                 texto: paso,
                 esUltimo: esUltimo,
+                // Id unico por temporizador: combina receta y paso para que
+                // varias recetas abiertas a la vez no se machaquen entre si.
+                idTimer: recetaId * 100 + (index + 1),
               );
             }).toList(),
           ),
@@ -634,29 +734,35 @@ class _SeccionInstrucciones extends StatelessWidget {
   }
 }
 
-/// Tarjeta de un paso de las instrucciones con número y línea conectora.
 class _TarjetaPaso extends StatelessWidget {
   final int numero;
   final String texto;
   final bool esUltimo;
 
+  final int idTimer;
+
   const _TarjetaPaso({
     required this.numero,
     required this.texto,
     required this.esUltimo,
+    required this.idTimer,
   });
 
   @override
   Widget build(BuildContext context) {
+    // Deteccion automatica de tiempos en el texto del paso.
+    // Si el parser no encuentra ninguna expresion temporal, [minutosDetectados]
+    // sera null y el boton de temporizador no se renderizara.
+    final minutosDetectados = ParserTiempos.extraerMinutos(texto);
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Columna izquierda: número del paso y línea conectora
+          // Columna izquierda: numero del paso y linea conectora
           Column(
             children: [
-              // Círculo numerado
               Container(
                 width: 36,
                 height: 36,
@@ -675,7 +781,6 @@ class _TarjetaPaso extends StatelessWidget {
                   ),
                 ),
               ),
-              // Línea vertical conectora (excepto en el último paso)
               if (!esUltimo)
                 Container(
                   width: 2,
@@ -687,7 +792,7 @@ class _TarjetaPaso extends StatelessWidget {
           ),
           const SizedBox(width: 14),
 
-          // Tarjeta con el texto del paso
+          // Tarjeta con el texto del paso y boton temporizador opcional
           Expanded(
             child: Container(
               padding: const EdgeInsets.all(16),
@@ -695,13 +800,63 @@ class _TarjetaPaso extends StatelessWidget {
                 color: const Color(0xFFfaebe7),
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: Text(
-                texto,
-                style: GoogleFonts.inter(
-                  fontSize: 14,
-                  color: const Color(0xFF55433e),
-                  height: 1.5,
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    texto,
+                    style: GoogleFonts.inter(
+                      fontSize: 14,
+                      color: const Color(0xFF55433e),
+                      height: 1.5,
+                    ),
+                  ),
+
+                  // Boton de temporizador: solo aparece si el parser ha
+                  // detectado una expresion temporal en el texto del paso.
+                  if (minutosDetectados != null) ...[
+                    const SizedBox(height: 10),
+                    GestureDetector(
+                      onTap: () {
+                        TemporizadorDialog.mostrar(
+                          context,
+                          idTimer: idTimer,
+                          minutosSugeridos: minutosDetectados,
+                          descripcionPaso: 'Paso $numero: ${_resumirPaso(texto)}',
+                        );
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF732b16),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.timer_outlined,
+                              size: 14,
+                              color: Colors.white,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Temporizador ${ParserTiempos.formatearDuracion(minutosDetectados)}',
+                              style: GoogleFonts.inter(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
           ),
@@ -709,15 +864,28 @@ class _TarjetaPaso extends StatelessWidget {
       ),
     );
   }
+
+  String _resumirPaso(String texto) {
+    final limpio = texto.trim();
+    if (limpio.length <= 60) return limpio;
+    return '${limpio.substring(0, 57)}...';
+  }
 }
 
-/// Barra de acciones fija en la parte inferior de la pantalla.
-/// Contiene el botón de guardar y el botón principal de cocinar.
 class _BarraAcciones extends StatelessWidget {
-  const _BarraAcciones();
+  final List<Intolerancia> aversionesAfectadas;
+
+  final VoidCallback onCocinar;
+
+  const _BarraAcciones({
+    required this.aversionesAfectadas,
+    required this.onCocinar,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final muestraAviso = aversionesAfectadas.isNotEmpty;
+
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
       decoration: BoxDecoration(
@@ -728,60 +896,151 @@ class _BarraAcciones extends StatelessWidget {
           ),
         ),
       ),
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          // Botón guardar / marcar como favorita
-          Container(
-            width: 54,
+          // Aviso de aversiones detectadas: solo se muestra cuando la
+          // receta contiene algun ingrediente con aversion registrada.
+          if (muestraAviso) ...[
+            _AvisoAversiones(aversiones: aversionesAfectadas),
+            const SizedBox(height: 10),
+          ],
+          // Boton principal: "¡Voy a cocinarlo!"
+          // Ocupa todo el ancho disponible al ser la unica accion principal
+          // de la pantalla de detalle de la receta.
+          SizedBox(
+            width: double.infinity,
             height: 54,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(27),
-              border: Border.all(color: const Color(0xFFdbc1ba)),
-            ),
-            child: const Icon(
-              Icons.bookmark_border,
-              color: Color(0xFF732b16),
-            ),
-          ),
-          const SizedBox(width: 12),
-
-          // Botón principal: "¡Voy a cocinarlo!"
-          Expanded(
-            child: SizedBox(
-              height: 54,
-              child: ElevatedButton.icon(
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('¡Buen provecho! 🍽️'),
-                    ),
-                  );
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF732b16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(27),
-                  ),
-                  elevation: 0,
+            child: ElevatedButton.icon(
+              onPressed: onCocinar,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF732b16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(27),
                 ),
-                icon: const Icon(
-                  Icons.restaurant,
+                elevation: 0,
+              ),
+              icon: const Icon(
+                Icons.restaurant,
+                color: Colors.white,
+                size: 20,
+              ),
+              label: Text(
+                '¡Voy a cocinarlo!',
+                style: GoogleFonts.inter(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
                   color: Colors.white,
-                  size: 20,
-                ),
-                label: Text(
-                  '¡Voy a cocinarlo!',
-                  style: GoogleFonts.inter(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
-                  ),
                 ),
               ),
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _AvisoAversiones extends StatelessWidget {
+  final List<Intolerancia> aversiones;
+
+  const _AvisoAversiones({required this.aversiones});
+
+  @override
+  Widget build(BuildContext context) {
+    final nombres = aversiones.map((a) => a.nombreAlimento).join(', ');
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFfdb733).withOpacity(0.18),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: const Color(0xFF7f5700).withOpacity(0.25),
+        ),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.psychology_alt_outlined,
+            size: 18,
+            color: Color(0xFF7f5700),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Esta receta contiene: $nombres. Tras cocinar te pediremos '
+              'feedback para actualizar tu progreso.',
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                color: const Color(0xFF55433e),
+                height: 1.35,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BloqueMacros extends StatelessWidget {
+  final double? proteinas;
+  final double? hidratos;
+  final double? grasas;
+
+  const _BloqueMacros({this.proteinas, this.hidratos, this.grasas});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFfff0ed),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          _ItemMacro(etiqueta: 'Proteínas', valor: proteinas),
+          _ItemMacro(etiqueta: 'Hidratos', valor: hidratos),
+          _ItemMacro(etiqueta: 'Grasas', valor: grasas),
+        ],
+      ),
+    );
+  }
+}
+
+class _ItemMacro extends StatelessWidget {
+  final String etiqueta;
+  final double? valor;
+
+  const _ItemMacro({required this.etiqueta, required this.valor});
+
+  @override
+  Widget build(BuildContext context) {
+    final texto = valor != null ? '${valor!.round()} g' : '—';
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          texto,
+          style: GoogleFonts.newsreader(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: const Color(0xFF211a18),
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          etiqueta,
+          style: GoogleFonts.inter(
+            fontSize: 11,
+            color: const Color(0xFF88726d),
+          ),
+        ),
+      ],
     );
   }
 }

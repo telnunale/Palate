@@ -16,4 +16,10 @@ public interface RecetaService {
     RecetaDTO generarYGuardarConAversion(String descripcion, Long intoleranciaId) throws Exception;
 
     RecetaDTO generarYGuardarConDespensa(Long usuarioId, Long intoleranciaId, String descripcion) throws Exception;
+
+    RecetaDTO generarYGuardarConAversiones(String descripcion, List<Long> intoleranciaIds) throws Exception;
+
+    RecetaDTO generarYGuardarConDespensaYAversiones(Long usuarioId, List<Long> intoleranciaIds, String descripcion) throws Exception;
+
+    Optional<String> regenerarImagen(Long recetaId);
 }

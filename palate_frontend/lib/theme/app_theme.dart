@@ -1,55 +1,37 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-/// Define el tema visual global de la aplicación Palate.
-/// Centraliza la paleta de colores Material 3 y la tipografía personalizada
-/// para mantener coherencia visual en todas las pantallas.
 class AppTheme {
   // ==================== COLORES ====================
 
-  /// Color primario: terracota oscuro, usado en botones y elementos principales
   static const Color primary = Color(0xFF732b16);
 
-  /// Variante del color primario, más claro
   static const Color primaryContainer = Color(0xFF91412b);
 
-  /// Color secundario: ámbar oscuro, usado en acentos y badges
   static const Color secondary = Color(0xFF7f5700);
 
-  /// Contenedor secundario: mostaza, usado en chips y badges de estado
   static const Color secondaryContainer = Color(0xFFfdb733);
 
-  /// Fondo general de la aplicación: crema cálido
   static const Color surface = Color(0xFFfff8f6);
 
-  /// Nivel bajo de contenedor de superficie, usado en inputs
   static const Color surfaceContainerLow = Color(0xFFfff0ed);
 
-  /// Nivel medio de contenedor de superficie, usado en cards
   static const Color surfaceContainer = Color(0xFFfaebe7);
 
-  /// Nivel alto de contenedor de superficie
   static const Color surfaceContainerHigh = Color(0xFFf4e5e2);
 
-  /// Color de texto principal sobre superficies claras
   static const Color onSurface = Color(0xFF211a18);
 
-  /// Color de texto secundario, para subtítulos y textos de apoyo
   static const Color onSurfaceVariant = Color(0xFF55433e);
 
-  /// Color de bordes y divisores
   static const Color outline = Color(0xFF88726d);
 
-  /// Variante de bordes, más suave
   static const Color outlineVariant = Color(0xFFdbc1ba);
 
-  /// Color de error, usado en validaciones y alertas
   static const Color error = Color(0xFFba1a1a);
 
   // ==================== TEMA PRINCIPAL ====================
 
-  /// Retorna el [ThemeData] configurado con la identidad visual de Palate.
-  /// Utiliza Material Design 3 con el esquema de colores terracota.
   static ThemeData get tema {
     return ThemeData(
       useMaterial3: true,
@@ -115,9 +97,6 @@ class AppTheme {
     );
   }
 
-  /// Construye el esquema tipográfico combinando:
-  /// - [GoogleFonts.newsreader] para títulos y encabezados (estilo editorial)
-  /// - [GoogleFonts.inter] para cuerpo de texto (alta legibilidad)
   static TextTheme _buildTextTheme() {
     return TextTheme(
       displayLarge: GoogleFonts.newsreader(

@@ -5,7 +5,7 @@ import '../models/receta.dart';
 import '../models/receta_recomendada.dart';
 
 class ApiService {
-  static const String baseUrl = 'https://palate-qv0g.onrender.com/api';
+  static const String baseUrl = 'https://palate-production-2323.up.railway.app/api';
 
   Future<Usuario> login(String email, String password) async {
     final respuesta = await http.post(

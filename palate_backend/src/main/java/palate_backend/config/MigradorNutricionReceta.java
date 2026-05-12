@@ -13,7 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 
 /**
- * Calcula calorias y macros via Edamam para recetas que no las tengan.
+ * Calcula calorias y macros via Gemini para recetas que no las tengan.
  * Idempotente: solo procesa filas con calorias_total NULL.
  */
 @Configuration
@@ -51,7 +51,7 @@ public class MigradorNutricionReceta {
             }
             if (actualizadas > 0) {
                 System.out.println("[MigradorNutricionReceta] Nutricion calculada en "
-                        + actualizadas + " recetas via Edamam.");
+                        + actualizadas + " recetas via Gemini.");
             }
         }
     }

@@ -33,7 +33,6 @@ public class RecetaGeneradorService implements RecetaService {
     private final ClasificadorImagen clasificadorImagen;
     private final PexelsImagenService pexelsImagenService;
     private final FluxImagenService fluxImagenService;
-    private final EdamamNutricionService edamamNutricionService;
 
     @Autowired
     public RecetaGeneradorService(RecetaRepository recetaRepository,
@@ -43,8 +42,7 @@ public class RecetaGeneradorService implements RecetaService {
                                   ProductoDespensaRepository productoDespensaRepository,
                                   ClasificadorImagen clasificadorImagen,
                                   PexelsImagenService pexelsImagenService,
-                                  FluxImagenService fluxImagenService,
-                                  EdamamNutricionService edamamNutricionService) {
+                                  FluxImagenService fluxImagenService) {
         this.recetaRepository = recetaRepository;
         this.alimentoRepository = alimentoRepository;
         this.iaService = iaService;
@@ -53,7 +51,6 @@ public class RecetaGeneradorService implements RecetaService {
         this.clasificadorImagen = clasificadorImagen;
         this.pexelsImagenService = pexelsImagenService;
         this.fluxImagenService = fluxImagenService;
-        this.edamamNutricionService = edamamNutricionService;
     }
 
     /**
@@ -324,28 +321,36 @@ public class RecetaGeneradorService implements RecetaService {
         return recetaRepository.save(receta);
     }
 
+    /**
+     * Calcula calorias y macronutrientes totales de la receta delegando en
+     * Gemini (sustituye a Edamam por agotamiento de cuota). Construye un
+     * listado de ingredientes en espanol con cantidad y unidad para que el
+     * modelo pueda estimar el aporte agregado.
+     */
     public void calcularYAplicarNutricion(Receta receta) {
         if (receta.getIngredientes() == null || receta.getIngredientes().isEmpty()) return;
 
+        // Construye descripciones tipo "200 g pechuga de pollo" para cada ingrediente.
         List<String> texto = new ArrayList<>();
         for (RecetaAlimento ra : receta.getIngredientes()) {
             if (ra.getAlimento() == null) continue;
-            if (ra.getDescripcionNutricional() != null && !ra.getDescripcionNutricional().isBlank()) {
-                texto.add(ra.getDescripcionNutricional());
-            } else {
-                String unidad = ra.getUnidadMedida() != null ? ra.getUnidadMedida() : "g";
-                String cantidad = ra.getCantidad() != null ? ra.getCantidad().stripTrailingZeros().toPlainString() : "1";
-                texto.add(edamamNutricionService.construirDescripcionFallback(
-                        ra.getAlimento().getNombre(), cantidad, unidad));
-            }
+            String unidad = ra.getUnidadMedida() != null ? ra.getUnidadMedida() : "g";
+            String cantidad = ra.getCantidad() != null
+                    ? ra.getCantidad().stripTrailingZeros().toPlainString()
+                    : "1";
+            texto.add(cantidad + " " + unidad + " " + ra.getAlimento().getNombre());
         }
 
-        edamamNutricionService.analizar(receta.getTitulo(), texto).ifPresent(nut -> {
-            receta.setCaloriasTotal(nut.calorias());
-            receta.setProteinasTotal(nut.proteinas());
-            receta.setHidratosTotal(nut.hidratos());
-            receta.setGrasasTotal(nut.grasas());
-        });
+        try {
+            Map<String, Object> nut = iaService.analizarNutricion(receta.getTitulo(), texto);
+            if (nut == null) return;
+            receta.setCaloriasTotal(((Number) nut.get("calorias")).doubleValue());
+            receta.setProteinasTotal(((Number) nut.get("proteinas")).doubleValue());
+            receta.setHidratosTotal(((Number) nut.get("hidratos")).doubleValue());
+            receta.setGrasasTotal(((Number) nut.get("grasas")).doubleValue());
+        } catch (Exception e) {
+            System.err.println("[RecetaGeneradorService] Error al calcular nutricion via Gemini: " + e.getMessage());
+        }
     }
 
     private RecetaDTO recetaToDTO(Receta r) {

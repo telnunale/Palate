@@ -386,6 +386,73 @@ public class IAServiceImpl implements IAService {
                 """;
     }
 
+    /**
+     * Pide a Gemini que estime las calorias y macros totales de una receta a
+     * partir de su titulo y una lista de ingredientes en texto libre. Sustituye
+     * a Edamam: usamos el mismo modelo de chat-completion forzando una respuesta
+     * JSON con cuatro claves numericas. Si Gemini falla o devuelve datos invalidos
+     * se devuelve null para que el llamante pueda dejar la receta sin nutricion.
+     */
+    @Override
+    public Map<String, Object> analizarNutricion(String titulo, List<String> ingredientes) throws Exception {
+        if (ingredientes == null || ingredientes.isEmpty()) return null;
+
+        StringBuilder listado = new StringBuilder();
+        for (String ing : ingredientes) {
+            listado.append("- ").append(ing).append('\n');
+        }
+
+        String prompt = """
+                Eres un nutricionista. Estima los valores nutricionales TOTALES de la
+                siguiente receta sumando los aportes de todos sus ingredientes en peso crudo.
+
+                Titulo: %s
+                Ingredientes:
+                %s
+
+                Responde SOLO con un JSON valido con esta forma exacta y sin texto extra:
+                {
+                  "calorias": <numero kcal totales>,
+                  "proteinas": <gramos totales>,
+                  "hidratos": <gramos totales de carbohidratos>,
+                  "grasas": <gramos totales>
+                }
+                Usa numeros (no strings). No incluyas unidades ni comentarios.
+                """.formatted(titulo != null ? titulo : "Receta", listado);
+
+        try {
+            Map<String, Object> respuesta = llamarGemini(prompt);
+
+            double calorias = toDouble(respuesta.get("calorias"));
+            double proteinas = toDouble(respuesta.get("proteinas"));
+            double hidratos = toDouble(respuesta.get("hidratos"));
+            double grasas = toDouble(respuesta.get("grasas"));
+
+            if (calorias <= 0) return null;
+
+            return Map.of(
+                    "calorias", calorias,
+                    "proteinas", proteinas,
+                    "hidratos", hidratos,
+                    "grasas", grasas
+            );
+        } catch (Exception e) {
+            System.err.println("[GeminiNutricion] Error estimando nutricion: " + e.getMessage());
+            return null;
+        }
+    }
+
+    /** Conversion segura a double admitiendo Number o String JSON. */
+    private double toDouble(Object valor) {
+        if (valor == null) return 0;
+        if (valor instanceof Number n) return n.doubleValue();
+        try {
+            return Double.parseDouble(valor.toString());
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
+
     private Map<String, Object> llamarGemini(String prompt) throws Exception {
         String requestBody = objectMapper.writeValueAsString(Map.of(
                 "contents", new Object[]{

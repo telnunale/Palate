@@ -6,6 +6,7 @@ import '../models/receta.dart';
 import '../models/usuario.dart';
 import '../utils/imagen_optim.dart';
 import 'receta_detalle.dart';
+import 'generar_receta_view.dart';
 
 class RecetasView extends StatefulWidget {
   final Usuario usuario;
@@ -20,7 +21,6 @@ class RecetasViewState extends State<RecetasView> {
   final _viewModel = RecetasViewModel();
   final _busquedaController = TextEditingController();
 
-  bool _soloIA = false;
   int? _filtroTiempo;
   final Set<int> _aversionesFiltro = <int>{};
 
@@ -52,14 +52,11 @@ class RecetasViewState extends State<RecetasView> {
           receta.titulo.toLowerCase().contains(textoBusqueda) ||
           receta.descripcion.toLowerCase().contains(textoBusqueda);
 
-      final coincideIA = !_soloIA || receta.generadaPorIa;
-
       final coincideTiempo = _coincideFiltroTiempo(receta);
 
       final coincideAversion = _coincideFiltroAversion(receta);
 
       return coincideTexto &&
-          coincideIA &&
           coincideTiempo &&
           coincideAversion;
     }).toList();
@@ -188,11 +185,9 @@ class RecetasViewState extends State<RecetasView> {
                         children: [
                           _ChipFiltro(
                             etiqueta: 'Todas',
-                            activo: !_soloIA &&
-                                _filtroTiempo == null &&
+                            activo: _filtroTiempo == null &&
                                 _aversionesFiltro.isEmpty,
                             onTap: () => setState(() {
-                              _soloIA = false;
                               _filtroTiempo = null;
                               _aversionesFiltro.clear();
                             }),
@@ -219,13 +214,6 @@ class RecetasViewState extends State<RecetasView> {
                             activo: _filtroTiempo == 45,
                             onTap: () => setState(() {
                               _filtroTiempo = _filtroTiempo == 45 ? null : 45;
-                            }),
-                          ),
-                          const SizedBox(width: 8),
-                          _ChipFiltroIA(
-                            activo: _soloIA,
-                            onTap: () => setState(() {
-                              _soloIA = !_soloIA;
                             }),
                           ),
                         ],
@@ -338,6 +326,18 @@ class RecetasViewState extends State<RecetasView> {
                   const SliverToBoxAdapter(child: SizedBox(height: 24)),
                 ],
               ),
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => GenerarRecetaView(usuario: widget.usuario),
+            ),
+          );
+        },
+        backgroundColor: const Color(0xFF732b16),
+        child: const Icon(Icons.auto_awesome, color: Colors.white),
       ),
     );
   }
@@ -462,51 +462,6 @@ class _ChipFiltroAversion extends StatelessWidget {
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
                 color: activo ? Colors.white : const Color(0xFF732b16),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ChipFiltroIA extends StatelessWidget {
-  final bool activo;
-  final VoidCallback onTap;
-
-  const _ChipFiltroIA({required this.activo, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        decoration: BoxDecoration(
-          color: activo
-              ? const Color(0xFF732b16).withOpacity(0.12)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: const Color(0xFF732b16).withOpacity(0.3),
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(
-              Icons.auto_awesome,
-              size: 14,
-              color: Color(0xFF732b16),
-            ),
-            const SizedBox(width: 4),
-            Text(
-              'Generado por IA',
-              style: GoogleFonts.inter(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: const Color(0xFF732b16),
               ),
             ),
           ],
